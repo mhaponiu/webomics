@@ -1,0 +1,257 @@
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   width="600" height="400" x="10" y="10" close="onCloseEvent();" title="Read file">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.event.ReadFileEvent;
+			
+			import flash.events.Event;
+			import flash.events.IOErrorEvent;
+			import flash.net.FileFilter;
+			import flash.net.FileReference;
+			import flash.utils.ByteArray;
+			
+			import mx.controls.Alert;
+			import mx.managers.PopUpManager;
+			
+			/**
+			 * 
+			 */
+			private var fr:FileReference;
+			
+			/**
+			 * 
+			 */
+			private var fileTypes:Array;
+			
+			public static const FASTA_FORMAT : String = "FASTA";
+			public static const CSV_FORMAT : String = "CSV";
+			
+			private var fileType : String;
+			
+			public function setFileType(ft : String):void
+			{
+				this.fileType = ft;
+				
+				if(ft == ReadFile.FASTA_FORMAT)
+				{
+					load_button.label = "Load sequence(-s) in FASTA file format";
+					fileTypes = [new FileFilter("FASTA file", "*.fasta;*.txt")];
+				}
+				else
+				{
+					load_button.label = "Load structure(-s) in CSV file format";
+					fileTypes = [new FileFilter("CSV file", "*.csv;*.txt")];
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onLoadFileClick():void
+			{
+				fr = new FileReference();
+				
+				// Nasluchiwacz przycisku SELECT w oknie wyboru pliku
+				fr.addEventListener(Event.SELECT, onFileSelect);
+				
+				// Nasluchiwacz przycisku CANCEL w oknie wyboru pliku
+				fr.addEventListener(Event.CANCEL,onCancel);
+				
+				// Otwarcie dialogu z wyborem pliku z nalozonym danym filtrem
+				fr.browse(fileTypes);
+			}
+
+			/**
+			 * Kiedy uzytkownik wybierze plik
+			 */
+			private function onFileSelect(e:Event):void
+			{
+				// Nasluchiwacz poprawnego ladowania pliku
+				fr.addEventListener(Event.COMPLETE, onLoadComplete);
+				
+				// Nasluchiwacz blednego ladowania pliku
+				fr.addEventListener(IOErrorEvent.IO_ERROR, onLoadError);
+				
+				// Zaladowanie zawartosci pliku
+				fr.load();
+			}
+			
+			/**
+			 * Kiedy uzytkownik nacisnie cancel w oknie wyboru pliku
+			 */
+			private function onCancel(e:Event):void
+			{
+				trace("File Browse Canceled");
+				fr = null;
+			}
+
+			/**
+			 * 
+			 */
+			private function onLoadComplete(e:Event):void
+			{
+				// Odebranie danych
+				var data:ByteArray = fr.data;
+				
+				// Wypelnienie textfielda
+				outputField.text = data.readUTFBytes(data.bytesAvailable);
+
+				fr = null;
+			}
+			
+			/**
+			 * 
+			 */
+			protected function searchButtonClicked(event:MouseEvent):void
+			{
+				if(outputField.text.length > 0)
+				{
+					dispatchEvent(new ReadFileEvent(outputField.text));
+					PopUpManager.removePopUp(this);
+				}
+				else
+				{
+					Alert("You have to select the file to be able to search.");
+				}
+			}
+			
+			/**
+			 * 
+			*/
+			private function onLoadError(e:IOErrorEvent):void
+			{
+				trace("Error loading file : " + e.text);
+			}
+			
+			/**
+			 * 
+			 */
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function cancelButtonClicked(event:MouseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			public static function parseFasta(text : String) : Array
+			{
+				var seqs : Array = new Array();
+				var lines : Array = text.split("\r");
+				var current_id : String = "";
+				var current_seq : String = "";
+				var found : Boolean = false;
+				var current_line : String = "";
+				
+				for(var line : String in lines)
+				{
+					current_line = lines[line];
+					
+					if(current_line.length == 0)
+						continue;
+					
+					if(current_line.length > 0 && current_line.charAt(0) == '>')	// Nazwa sekwencji
+					{
+						if(found)
+							seqs.push({'id' : current_id, 'seq' : current_seq});	// Dodanie sekwencji
+						
+						current_id = current_line.substr(1);		// Odczytanie ID (nazwy)
+						current_seq = "";
+						
+						found = true;						// Znalezlismy
+					}
+					else
+					{
+						current_seq += current_line;
+					}
+				}
+				
+				seqs.push({'id' : current_id, 'seq' : current_seq});
+				
+				return seqs;
+			}
+			
+			/**
+			 * 
+			 */
+			public static function parseScaffoldCSV(text : String) : Array
+			{
+				var scaffolds : Array = new Array();
+				var lines : Array = text.split("\r");
+
+				var current_line : String = "";
+				
+				for(var line : String in lines)
+				{
+					current_line = lines[line];
+					
+					if(current_line.length == 0)
+						continue;
+					
+					var scaff_params : Array = current_line.split(";");
+					trace("Parametry: " + scaff_params);
+					if(scaff_params.length != 4)
+					{
+						// Bledny wpis
+						scaffolds.push({'status' : false, 'message' : "Wrong amount of parameters! Line: " + line, "line" : line});
+						continue
+					}
+					
+					scaffolds.push({'status' : true, 'id' : scaff_params[0], 'chr_id' : scaff_params[1], 'start' : scaff_params[2], 'end' : scaff_params[3]});
+				}
+				
+				return scaffolds;
+			}
+			
+			/**
+			 * 
+			 */
+			public static function parseContigCSV(text : String) : Array
+			{
+				var contigs : Array = new Array();
+				var lines : Array = text.split("\r");
+				
+				var current_line : String = "";
+				
+				for(var line : String in lines)
+				{
+					current_line = lines[line];
+					
+					if(current_line.length == 0)
+						continue;
+					
+					var cont_params : Array = current_line.split(";");
+					trace("Parametry: " + cont_params);
+					if(cont_params.length != 5)
+					{
+						// Bledny wpis
+						contigs.push({'status' : false, 'message' : "Wrong amount of parameters! Line: " + line, "line" : line});
+						continue
+					}
+					
+					contigs.push({'status' : true, 'id' : cont_params[0], 'scaff_id' : cont_params[1], 'start' : cont_params[2], 'end' : cont_params[3], 'order' : cont_params[4]});
+				}
+				
+				return contigs;
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<s:Button label="OK" click="searchButtonClicked(event)" right="10" bottom="10"/>
+	<mx:Button id="load_button" label="Load sequence(-s) in FASTA file format" right="100" bottom="10" click="onLoadFileClick()"/>
+	<s:Button label="Cancel" click="cancelButtonClicked(event)" right="340" bottom="10"/>
+	<mx:TextArea right="10" left="10" top="10" bottom="40" id="outputField"/>
+	
+</s:TitleWindow>

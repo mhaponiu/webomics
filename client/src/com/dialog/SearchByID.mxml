@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   width="268" height="259" close="onCloseEvent();" title="Search Structure by ID">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.config.Config;
+			import com.remote.RemoteControl;
+			
+			import com.dialog.ScaffoldInformations;
+			import com.dialog.ContigInformations;
+
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.utils.ArrayUtil;
+			
+			/**
+			 * 
+			 */
+			private var connection:NetConnection;
+			
+			/**
+			 * 
+			 */
+			public function init():void 
+			{
+				CursorManager.setBusyCursor();
+				
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+				
+				scaffold_radio.selected = true;
+				struct_id.restrict = "A-Z 0-9";
+				
+				CursorManager.removeBusyCursor();
+			}
+			
+			/**
+			 * 
+			 */
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+
+			/**
+			 * 
+			 */
+			protected function cancelButtonClicked(event:MouseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function radioButtonChanged(event:MouseEvent):void
+			{
+				// Zmiana walidacji textboxa
+				// Scaffold - cyfry + litery
+				if (scaffold_radio.selected == true) 
+				{
+					struct_id.restrict = "A-Z 0-9";
+				}
+				// Contig - cyfry
+				else if (contig_radio.selected == true) 
+				{
+					struct_id.restrict = "0-9";
+				}
+				// Marker - cyfry + litery
+				else if (marker_radio.selected == true) 
+				{
+					struct_id.restrict = "A-Z 0-9";
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			protected function okButtonClicked(event:MouseEvent):void
+			{				
+				if (scaffold_radio.selected == true) 
+				{
+					CursorManager.setBusyCursor();
+
+					connection.call("scaffold.getScaffold", new Responder(onGetScaffold, OnFaultGetScaffold), String(struct_id.text));
+					
+					PopUpManager.removePopUp(this);
+				} 
+				else if (contig_radio.selected == true) 
+				{
+					CursorManager.setBusyCursor();
+					
+					connection.call("contig.get", new Responder(onGetContig, OnFaultGetContig), int(struct_id.text));
+					
+					PopUpManager.removePopUp(this);
+				}
+				else if (marker_radio.selected == true) 
+				{
+					CursorManager.setBusyCursor();
+					CursorManager.removeBusyCursor();
+					
+					PopUpManager.removePopUp(this);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onGetScaffold(data:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				
+				if(data != null)
+				{
+					var scaffold_informations:ScaffoldInformations = new ScaffoldInformations();
+					PopUpManager.addPopUp(scaffold_informations, this, false);
+					PopUpManager.centerPopUp(scaffold_informations);
+					scaffold_informations.init(data);
+				}
+				else
+				{
+					Alert.show("Searched scaffold does not exist.");
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function OnFaultGetScaffold(obj:Object):void
+			{
+				Alert.show("Blad w dzialaniu aplikacji w oknie SearchByID podczas pobierania scaffoldu!");
+				trace("Blad: " + obj);
+			}
+			
+			/**
+			 * 
+			 */
+			private function onGetContig(data:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				
+				if(data != null)
+				{
+					var contig_informations:ContigInformations = new ContigInformations();
+					PopUpManager.addPopUp(contig_informations, this, false);
+					PopUpManager.centerPopUp(contig_informations);
+					contig_informations.init(data);
+				}
+				else
+				{
+					Alert.show("Searched contig does not exist.");
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function OnFaultGetContig(obj:Object):void
+			{
+				Alert.show("Blad w dzialaniu aplikacji w oknie SearchByID podczas pobierania contigu!");
+				trace("Blad: " + obj);
+			}
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+	<fx:Declarations>
+		<s:RadioButtonGroup id="radiogroup1"/>
+	</fx:Declarations>
+	<s:Spacer width="240" height="12"/>
+	<s:Label fontWeight="bold" text="Select a type of structure:"/>
+	<s:RadioButton id = "scaffold_radio" label="Scaffold" selected="true" value="seq" click="radioButtonChanged(event)"/>
+	<s:RadioButton id = "contig_radio" label="Contig" value = "file" click="radioButtonChanged(event)"/>
+	<s:RadioButton id = "marker_radio" label="Marker" value = "file" click="radioButtonChanged(event)"/>
+	<mx:HRule width="250" height="4"/>
+	<s:Form width="246">
+		<s:FormItem label="ID:">
+			<s:TextInput id="struct_id" width="169"/>
+		</s:FormItem>
+	</s:Form>
+	<s:HGroup width="144" height="20">
+		<s:Spacer width="49" height="14"/>
+		<s:Button id = "cancel_button" label="Cancel" click="cancelButtonClicked(event)"/>
+		<s:Button id = "ok_button" label="OK" click="okButtonClicked(event)"/>
+	</s:HGroup>
+</s:TitleWindow>

@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   width="600" height="351" close="onCloseEvent();" title="Markers on scaffold">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.ChromosomeView;
+			import com.config.Config;
+			import com.remote.RemoteControl;
+			import com.dialog.MarkerInformations;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.ListEvent;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.utils.ArrayUtil;
+			
+			import spark.events.IndexChangeEvent;
+			
+			/**
+			 * 
+			 */
+			private var connection:NetConnection;
+			
+			[Bindable]
+			private var markers_collection:ArrayCollection;
+			
+			private var marker_index:int = -1;
+			
+			private var scaffold_id : String;
+			
+			/**
+			 * 
+			 */
+			public function init(scaffold_id : String):void 
+			{
+				CursorManager.setBusyCursor();
+				
+				this.scaffold_id = scaffold_id;
+				
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+				
+				// Ustawienie interfejsu
+				show_button.enabled = false;
+				
+				connection.call("marker.getMarkersDictOnScaff", new Responder(onGetMarkersOnScaff, onFaultGetMarkersOnScaff), String(scaffold_id));
+			}
+			
+			/**
+			 * 
+			 */
+			private function onGetMarkersOnScaff(markers:Object):void
+			{
+				markers_collection = new ArrayCollection(ArrayUtil.toArray(markers));
+				CursorManager.removeBusyCursor();
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultGetMarkersOnScaff(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie MarkersOnScaffold podczas pobierania markerow!");
+				trace("Blad: " + obj);
+			}
+			
+			/**
+			 * 
+			 */
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function cancelButtonClicked(event:MouseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function showButtonClicked(event:MouseEvent):void
+			{
+				var marker_informations:MarkerInformations = new MarkerInformations();
+				PopUpManager.addPopUp(marker_informations, this, false);
+				PopUpManager.centerPopUp(marker_informations);
+				marker_informations.initByName(markers_collection.getItemAt(marker_index).NAME);	
+			}
+			
+			private function buildToolTip(item:Object):String
+			{
+				var tip:String = "";
+				if (item != null)
+					tip = String(item.NAME);
+				return tip;
+			}
+			
+			private function itemClickEvent(event:ListEvent):void
+			{
+				marker_index = int(event.rowIndex);
+				show_button.enabled = true;
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+	<s:HGroup width="100%" height="90%">
+		<mx:Panel title="Markers"
+				  width="100%"
+				  height="100%"
+				  layout="vertical"
+				  alpha="1.0">
+			<mx:DataGrid id="markers_data_grid"
+						 itemClick="itemClickEvent(event);"
+						 width="100%"
+						 height="100%"
+						 dataProvider="{markers_collection}"
+						 dataTipFunction="buildToolTip">
+				<mx:columns>
+					<mx:DataGridColumn headerText="LP"
+									   dataField="LP"
+									   headerRenderer="mx.controls.Label"
+									   width="80"
+									   showDataTips="true"/>
+					<mx:DataGridColumn headerText="Name"
+									   dataField="NAME"
+									   headerRenderer="mx.controls.Label"
+									   width="140"
+									   showDataTips="true"/>
+					<mx:DataGridColumn headerText="Chromosome ID"
+									   dataField="CHR_ID"
+									   headerRenderer="mx.controls.Label"
+									   width="160"
+									   showDataTips="true"/>
+					<mx:DataGridColumn headerText="Position cM"
+									   dataField="POS_CM"
+									   headerRenderer="mx.controls.Label"
+									   width="140"
+									   showDataTips="true"/>
+					<mx:DataGridColumn headerText="Scaffold ID"
+									   dataField="SCAFF_ID"
+									   headerRenderer="mx.controls.Label"
+									   width="140"
+									   showDataTips="true"/>
+					<mx:DataGridColumn headerText="Start index (bp)"
+									   dataField="START_INDEX"
+									   headerRenderer="mx.controls.Label"
+									   width="220"
+									   showDataTips="true"/>
+					<mx:DataGridColumn headerText="End index (bp)"
+									   dataField="END_INDEX"
+									   headerRenderer="mx.controls.Label"
+									   width="220"
+									   showDataTips="true"/>
+				</mx:columns>
+			</mx:DataGrid>
+		</mx:Panel>	
+	</s:HGroup>
+	<s:HGroup width="100%" height="27">
+		<s:Spacer width="35%" height="13"/>
+		<s:Button label="Cancel" click="cancelButtonClicked(event)"/>
+		<s:Button id = "show_button" label="Show details" click="showButtonClicked(event)"/>
+	</s:HGroup>
+</s:TitleWindow>

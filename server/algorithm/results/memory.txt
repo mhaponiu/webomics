@@ -1,0 +1,315 @@
+---- ROZPOCZYNAM ----
+
+Dlugosc wzorca: 100
+Dlugosc sekwencji:      10000
+
+Rozpoczynam badanie boost::numeric::ublas::matrix<short int>...
+Zakonczylem badanie boost::numeric::ublas::matrix<short int>.
+Matrix czas: 0.0469999313354
+
+Rozpoczynam badanie std::vector<std::vector<short int> >...
+Zakonczylem badanie std::vector<std::vector<short int> >.
+Vectors czas: 0.108999967575
+
+Rozpoczynam badanie malloc (short int)...
+Zakonczylem badanie malloc (short int).
+Malloc czas: 0.0150001049042
+
+
+---- ZAKONCZYLEM ----
+
+Filename: profiler.py
+
+Line #    Mem usage    Increment   Line Contents
+================================================
+    19                             @profile
+    20     16.58 MB      0.00 MB   def check():
+    21     16.59 MB      0.01 MB       print "\n---- ROZPOCZYNAM ----\n"
+    22                                 # ----------------- SCAFFOLDY ------------------
+    23     16.59 MB      0.00 MB       scaffs = Scaffold.objects.all()
+    24
+    25     18.23 MB      1.64 MB       seq = str(scaffs[0].sequence)[:10000]
+    26     18.23 MB      0.00 MB       patt = "G"*100
+    27
+    28     18.23 MB      0.00 MB       print "Dlugosc wzorca:\t", len(patt)
+    29     18.23 MB      0.00 MB       print "Dlugosc sekwencji:\t", len(seq), "\n"
+    30
+    31                                 # MATRIX
+    32     18.23 MB      0.00 MB       start = time.time()
+    33     18.29 MB      0.05 MB       memo.matrix(seq, patt)
+    34     18.29 MB      0.00 MB       stop = time.time()
+    35
+    36     18.29 MB      0.00 MB       print "Matrix czas:", stop - start, "\n"
+    37
+    38                                 # VECTORS
+    39     18.29 MB      0.00 MB       start = time.time()
+    40     19.12 MB      0.83 MB       memo.vectors(seq, patt)
+    41     19.12 MB      0.00 MB       stop = time.time()
+    42
+    43     19.12 MB      0.00 MB       print "Vectors czas:", stop - start, "\n"
+    44
+    45                                 # MALLOC
+    46     19.12 MB      0.00 MB       start = time.time()
+    47     19.66 MB      0.54 MB       memo.heap(seq, patt)
+    48     19.66 MB      0.00 MB       stop = time.time()
+    49
+    50     19.66 MB      0.00 MB       print "Malloc czas:", stop - start, "\n"
+    51
+    52     19.66 MB      0.00 MB       print "\n---- ZAKONCZYLEM ----\n"
+	
+	
+	
+------------------------------------------------------------------------------------------------------------------------------
+	
+	
+	---- ROZPOCZYNAM ----
+
+Dlugosc wzorca: 100
+Dlugosc sekwencji:      100000
+
+Rozpoczynam badanie boost::numeric::ublas::matrix<short int>...
+Zakonczylem badanie boost::numeric::ublas::matrix<short int>.
+Matrix czas: 0.265000104904
+
+Rozpoczynam badanie std::vector<std::vector<short int> >...
+Zakonczylem badanie std::vector<std::vector<short int> >.
+Vectors czas: 0.951999902725
+
+Rozpoczynam badanie malloc (short int)...
+Zakonczylem badanie malloc (short int).
+Malloc czas: 0.0150001049042
+
+
+---- ZAKONCZYLEM ----
+
+Filename: profiler.py
+
+Line #    Mem usage    Increment   Line Contents
+================================================
+    19                             @profile
+    20     16.59 MB      0.00 MB   def check():
+    21     16.60 MB      0.01 MB       print "\n---- ROZPOCZYNAM ----\n"
+    22                                 # ----------------- SCAFFOLDY ------------------
+    23     16.61 MB      0.00 MB       scaffs = Scaffold.objects.all()
+    24
+    25     18.34 MB      1.73 MB       seq = str(scaffs[0].sequence)[:100000]
+    26     18.34 MB      0.00 MB       patt = "G"*100
+    27
+    28     18.34 MB      0.00 MB       print "Dlugosc wzorca:\t", len(patt)
+    29     18.34 MB      0.00 MB       print "Dlugosc sekwencji:\t", len(seq), "\n"
+    30
+    31                                 # MATRIX
+    32     18.34 MB      0.00 MB       start = time.time()
+    33     18.57 MB      0.23 MB       memo.matrix(seq, patt)
+    34     18.57 MB      0.00 MB       stop = time.time()
+    35
+    36     18.57 MB      0.00 MB       print "Matrix czas:", stop - start, "\n"
+    37
+    38                                 # VECTORS
+    39     18.57 MB      0.00 MB       start = time.time()
+    40     20.03 MB      1.46 MB       memo.vectors(seq, patt)
+    41     20.03 MB      0.00 MB       stop = time.time()
+    42
+    43     20.03 MB      0.00 MB       print "Vectors czas:", stop - start, "\n"
+    44
+    45                                 # MALLOC
+    46     20.03 MB      0.00 MB       start = time.time()
+    47     20.97 MB      0.94 MB       memo.heap(seq, patt)
+    48     20.97 MB      0.00 MB       stop = time.time()
+    49
+    50     20.97 MB      0.00 MB       print "Malloc czas:", stop - start, "\n"
+    51
+    52     20.97 MB      0.00 MB       print "\n---- ZAKONCZYLEM ----\n"
+	
+	
+	
+------------------------------------------------------------------------------------------------------------------------------
+
+
+---- ROZPOCZYNAM ----
+
+Dlugosc wzorca: 100
+Dlugosc sekwencji:      1023918
+
+Rozpoczynam badanie boost::numeric::ublas::matrix<short int>...
+Zakonczylem badanie boost::numeric::ublas::matrix<short int>.
+Matrix czas: 2.62599992752
+
+Rozpoczynam badanie std::vector<std::vector<short int> >...
+Zakonczylem badanie std::vector<std::vector<short int> >.
+Vectors czas: 9.20399999619
+
+Rozpoczynam badanie malloc (short int)...
+Zakonczylem badanie malloc (short int).
+Malloc czas: 0.0150001049042
+
+
+---- ZAKONCZYLEM ----
+
+Filename: profiler.py
+
+Line #    Mem usage    Increment   Line Contents
+================================================
+    19                             @profile
+    20     16.59 MB      0.00 MB   def check():
+    21     16.59 MB      0.01 MB       print "\n---- ROZPOCZYNAM ----\n"
+    22                                 # ----------------- SCAFFOLDY ------------------
+    23     16.60 MB      0.00 MB       scaffs = Scaffold.objects.all()
+    24
+    25     19.21 MB      2.61 MB       seq = str(scaffs[0].sequence)
+    26     19.21 MB      0.00 MB       patt = "G"*100
+    27
+    28     19.21 MB      0.00 MB       print "Dlugosc wzorca:\t", len(patt)
+    29     19.21 MB      0.00 MB       print "Dlugosc sekwencji:\t", len(seq), "\n"
+    30
+    31                                 # MATRIX
+    32     19.21 MB      0.00 MB       start = time.time()
+    33     19.25 MB      0.04 MB       memo.matrix(seq, patt)	--> DO 200 MB
+    34     19.25 MB      0.00 MB       stop = time.time()
+    35
+    36     19.25 MB      0.00 MB       print "Matrix czas:", stop - start, "\n"
+    37
+    38                                 # VECTORS
+    39     19.25 MB      0.00 MB       start = time.time()
+    40     21.42 MB      2.18 MB       memo.vectors(seq, patt) --> DO 250 MB
+    41     21.42 MB      0.00 MB       stop = time.time()
+    42
+    43     21.42 MB      0.00 MB       print "Vectors czas:", stop - start, "\n"
+    44
+    45                                 # MALLOC
+    46     21.42 MB      0.00 MB       start = time.time()
+    47     22.18 MB      0.75 MB       memo.heap(seq, patt)
+    48     22.18 MB      0.00 MB       stop = time.time()
+    49
+    50     22.18 MB      0.00 MB       print "Malloc czas:", stop - start, "\n"
+    51
+    52     22.18 MB      0.00 MB       print "\n---- ZAKONCZYLEM ----\n"
+	
+	
+	
+----------------------------------------------------------------------------------------------------------------------
+
+
+---- ROZPOCZYNAM ----
+
+Dlugosc wzorca: 500
+Dlugosc sekwencji:      1023918
+
+Rozpoczynam badanie boost::numeric::ublas::matrix<short int>...
+Zakonczylem badanie boost::numeric::ublas::matrix<short int>.
+Matrix czas: 13.0169999599
+
+Rozpoczynam badanie std::vector<std::vector<short int> >...
+Zakonczylem badanie std::vector<std::vector<short int> >.
+Vectors czas: 34.9570000172
+
+Rozpoczynam badanie malloc (short int)...
+Zakonczylem badanie malloc (short int).
+Malloc czas: 0.0149998664856
+
+
+---- ZAKONCZYLEM ----
+
+Filename: profiler.py
+
+Line #    Mem usage    Increment   Line Contents
+================================================
+    19                             @profile
+    20     16.59 MB      0.00 MB   def check():
+    21     16.60 MB      0.01 MB       print "\n---- ROZPOCZYNAM ----\n"
+    22                                 # ----------------- SCAFFOLDY ------------------
+    23     16.61 MB      0.00 MB       scaffs = Scaffold.objects.all()
+    24
+    25     19.22 MB      2.61 MB       seq = str(scaffs[0].sequence)
+    26     19.22 MB      0.00 MB       patt = "G"*500
+    27
+    28     19.22 MB      0.00 MB       print "Dlugosc wzorca:\t", len(patt)
+    29     19.22 MB      0.00 MB       print "Dlugosc sekwencji:\t", len(seq), "\n"
+    30
+    31                                 # MATRIX
+    32     19.22 MB      0.00 MB       start = time.time()
+    33     19.25 MB      0.04 MB       memo.matrix(seq, patt)	--> DO 1 GB
+    34     19.25 MB      0.00 MB       stop = time.time()
+    35
+    36     19.25 MB      0.00 MB       print "Matrix czas:", stop - start, "\n"
+    37
+    38                                 # VECTORS
+    39     19.25 MB      0.00 MB       start = time.time()
+    40     24.30 MB      5.04 MB       memo.vectors(seq, patt)	--> PONAD 1 GB
+    41     24.30 MB      0.00 MB       stop = time.time()
+    42
+    43     24.30 MB      0.00 MB       print "Vectors czas:", stop - start, "\n"
+    44
+    45                                 # MALLOC
+    46     24.30 MB      0.00 MB       start = time.time()
+    47     27.71 MB      3.41 MB       memo.heap(seq, patt)
+    48     27.71 MB      0.00 MB       stop = time.time()
+    49
+    50     27.71 MB      0.00 MB       print "Malloc czas:", stop - start, "\n"
+    51
+    52     27.71 MB      0.00 MB       print "\n---- ZAKONCZYLEM ----\n"
+	
+	
+==============================================================================================================================
+
+void matrix(std::string text, std::string pattern)
+{
+	std::cout << "Rozpoczynam badanie boost::numeric::ublas::matrix<short int>..." << std::endl;
+
+	typedef boost::numeric::ublas::matrix<short int> Matrix;
+
+	Matrix matrix(text.length(), pattern.length());
+
+	// Wype³nienie macierzy
+	for(long i = 0; i < matrix.size1(); ++ i)		// Po wierszach
+	{
+		for(long j = 0; j < matrix.size2(); ++ j) 	// Po kolumnach
+		{
+			matrix(i, j) = (short int)5;
+		}
+	}
+
+	std::cout << "Zakonczylem badanie boost::numeric::ublas::matrix<short int>." << std::endl;
+}
+
+void vectors(std::string text, std::string pattern)
+{
+	std::cout << "Rozpoczynam badanie std::vector<std::vector<short int> >..." << std::endl;
+
+	typedef std::vector<short int> Row;
+	typedef std::vector<Row> Matrix;
+
+	Matrix matrix;
+
+	// Wype³nienie macierzy
+	for(long i = 0; i < text.length(); ++i)
+	{
+		Row row;
+
+		for(long j = 0; j < pattern.length(); ++j)	// Tworzymy wiersz
+		{
+			row.push_back((short int)5);
+		}
+
+		// Dodajemy wiersz do macierzy
+		matrix.push_back(row);
+	}
+
+	std::cout << "Zakonczylem badanie std::vector<std::vector<short int> >." << std::endl;
+}
+
+void heap(std::string text, std::string pattern)
+{
+	long int size = text.length();
+	long int size2 = pattern.length();
+
+	std::cout << "Rozpoczynam badanie malloc (short int)..." << std::endl;
+
+	short int ** matrix;
+
+	matrix = (short int **)malloc(size2 * sizeof(short int*));
+	for(int j = 0; j < size2; ++j)
+		matrix[j] = (short int*)malloc(size * sizeof(short int));
+
+	std::cout << "Zakonczylem badanie malloc (short int)." << std::endl;
+}

@@ -1,0 +1,166 @@
+import os, shutil, platform
+import SCons.Builder
+
+# cl /EHsc /MD /D "WIN32" /D "_WIN32_WINNT#0x501" /D "_CONSOLE" /D "CALC_EXPORTS" /D "_USRDLL" /D "_WINDLL" /D "_WINDOWS" /W4 
+# /IE:\Python27\include /IE:\boost\boost_1_51 Calc_py.cpp /link /dll /LIBPATH:E:\Python27\libs /LIBPATH:E:\boost\boost_1_51\lib /OUT:calc.pyd
+
+# IMPORTY
+Import('env')
+
+Import('PYTHON_INCLUDE_WINDOWS')
+Import('PYTHON_INCLUDE_LINUX')
+Import('PYTHON_LIB_WINDOWS')
+Import('PYTHON_LIB_LINUX')
+Import('BOOST_INCLUDE_WINDOWS')
+Import('BOOST_INCLUDE_LINUX')
+Import('BOOST_LIB_WINDOWS')
+Import('LIBBOOST_PYTHON')
+
+Import('DEBUG')
+
+# NAZWA BIBLIOTEKI WSPOLDZIELONEJ
+CALC_LIB_NAME = "calc"
+
+e = env.Clone()
+
+# ============================== FLAGI KOMPILACJI ORAZ SCIEZKI DO BIBLIOTEK ==========================
+
+# --------------------------------- LINUX --------------------------
+
+if(platform.system() == "Linux"):
+   if DEBUG:
+      e.Append( CPPFLAGS = '-Wall -pedantic -pthread -std=c++0x -DDEBUG' )
+   else:
+      e.Append( CPPFLAGS = '-Wall -pedantic -pthread -std=c++0x' )
+   e.Append( CPPPATH = [ PYTHON_INCLUDE_LINUX, BOOST_INCLUDE_LINUX, 'src' ] )
+   e.Append( LINKFLAGS = '-Wall -pthread ' + LIBBOOST_PYTHON )
+   e.Append( LIBPATH = [ PYTHON_LIB_LINUX ] )
+   e.Append( LIBS = [ 'python2.7', 'boost_python' ] )
+   
+# -------------------------------- WINDOWS -------------------------
+   
+elif(platform.system() == "Windows"):
+   e.Append( CPPPATH = [ Dir( BOOST_INCLUDE_WINDOWS ),      # Naglowki boost
+                         Dir( PYTHON_INCLUDE_WINDOWS ) ] )  # Naglowki python
+                       
+   e.Append( LIBPATH = [ Dir( BOOST_LIB_WINDOWS ),          # Sciezka do bibliotek boost
+                         Dir( PYTHON_LIB_WINDOWS ) ] )      # Sciezki do bibliotek python
+   if DEBUG:
+      #e.Append( CPPFLAGS = ' /EHsc /MD /D "WIN32" /D "_WIN32_WINNT#0x501" /D "_CONSOLE" /DDEBUG /W3 /D "_UNIT_TESTS" /O2 ' )
+      e.Append( CPPFLAGS = ' /EHsc /MD /D "_CONSOLE" /DDEBUG /W3 /D "_UNIT_TESTS" /O2 ' )
+   else:
+      #e.Append( CPPFLAGS = ' /EHsc /MD /D "_CONSOLE" /W3 /D "_UNIT_TESTS" /O2 ' )
+      e.Append( CPPFLAGS = ' /EHsc /MD /D "WIN32" /D "_WIN32_WINNT#0x501" /D "_CONSOLE" /W3 /D "_UNIT_TESTS" /O2 ' )
+   e.Append( LINKFLAGS = ' /SUBSYSTEM:WINDOWS ' )
+else:
+   print platform.system() + " nie obslugiwany!"
+   
+# ===================================================================================================
+
+def prepare_src_files( build_dir, src_files):
+   src_compilation = []
+   for f in src_files:
+      src_compilation.append(build_dir + f)
+   return src_compilation
+
+def build_link_to_lib( target, source, env):
+    if(platform.system() == "Linux"):
+        os.link( str(source[0]), str(target[0]) )
+    elif(platform.system() == "Windows"):
+        shutil.copy( str(source[0]), str(target[0]) )
+    return
+
+def build_tests(_env, build_dir, post_name):
+    e = _env.Clone()
+    
+    blast_files = ['blast/tests/blast_unit_test.cpp', 
+             'blast/Alignment.cpp',
+             'blast/Word.cpp',
+             'blast/Blast.cpp'
+            ]
+    
+    sw_files = [
+                'sw/tests/sw_unit_test.cpp',
+                'sw/CellSW.cpp',
+                'Similarity.cpp',
+                'sw/SW.cpp'
+                ]
+    
+    kmp_files = [
+                'kmp/tests/kmp_unit_test.cpp',
+                'kmp/KMP.cpp'
+                ]
+    
+    bm_files = [
+                'bm/tests/bm_unit_test.cpp',
+                'bm/BM.cpp'
+                ]
+
+    # DODATKOWE FLAGI KOMPILCJI I LINKOWANIA DLA SYSTEMOW
+    if(platform.system() == "Windows"):
+        e.Append( LINKFLAGS = ' /SUBSYSTEM:CONSOLE ' )
+    elif(platform.system() == "Linux"):
+        e.Append( LIBS = ['python2.7', 'boost_unit_test_framework'] )
+    
+    e.VariantDir( build_dir, 'algorithms/', duplicate = 0)
+    
+    # BLAST
+    e.Program( target = build_dir + CALC_LIB_NAME + 'BlastTests' + post_name, source = prepare_src_files(build_dir, blast_files) )
+    
+    # SW
+    e.Program( target = build_dir + CALC_LIB_NAME + 'SWTests' + post_name, source = prepare_src_files(build_dir, sw_files) )
+   
+    # KMP
+    e.Program( target = build_dir + CALC_LIB_NAME + 'KMPTests' + post_name, source = prepare_src_files(build_dir, kmp_files) )
+   
+    # BM
+    e.Program( target = build_dir + CALC_LIB_NAME + 'BMTests' + post_name, source = prepare_src_files(build_dir, bm_files) )
+   
+    return 
+
+## Zbudowanie bibliotek wspoldzielonych
+#  @param _env: Srodowisko
+#  @param build_dir: Miejsce umieszczenia wynikowych plikow kompilacji
+def build_shared(_env, build_dir):
+    e = _env.Clone()
+    
+    files = [# Binding do Pythona klas algorytmow
+             'Calc_py.cpp', 
+             # Algorytm KMP
+             'algorithms/kmp/KMP.cpp',
+             # Algorytm BM
+             'algorithms/bm/BM.cpp',
+             # Algorytm SW
+             'algorithms/sw/CellSW.cpp',
+             'algorithms/SimilaritySW_py.cpp',
+             'algorithms/sw/SW.cpp',
+             'algorithms/sw/SW_py.cpp',
+			 # Algorytm BLAST
+			 'algorithms/blast/Alignment.cpp',
+			 'algorithms/blast/Word.cpp',
+			 'algorithms/blast/Blast.cpp',
+             # Pliki pomocnicze
+             'algorithms/Similarity.cpp'
+             ]
+
+    # DODATKOWE FLAGI KOMPILCJI I LINKOWANIA DLA SYSTEMOW
+    if(platform.system() == "Windows"):
+        e.Append( CPPFLAGS = ' /D "_WINDOWS" /D "_USRDLL" /D "CALC_EXPORTS" /D "_WINDLL" ' )
+        e.Append( LINKFLAGS = ' /DLL ' )
+    elif(platform.system() == "Linux"):
+	e.Append( LINKFLAGS = '-shared' )
+    
+    s = e.SharedLibrary( target = build_dir + CALC_LIB_NAME, source = files )
+    
+    # POSTAC PLIKU WYNIKOWEGO
+    if(platform.system() == "Linux"):
+        out = build_dir + CALC_LIB_NAME + '.so'
+    elif(platform.system() == "Windows"):
+        out = build_dir + CALC_LIB_NAME + '.pyd'
+        
+    e.Command(out, s, build_link_to_lib )
+    
+    return
+    
+build_shared(e, 'build/')
+build_tests(e, 'build/tests/', '')

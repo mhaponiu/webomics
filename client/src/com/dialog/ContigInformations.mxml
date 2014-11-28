@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx" xmlns:s="library://ns.adobe.com/flex/spark" xmlns:fx="http://ns.adobe.com/mxml/2009" xmlns:net="flash.net.*"
+			   title="Contig details" width="800" close="onCloseEvent();">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.config.Config;
+			import com.dialog.MarkersOnContig;
+			import com.dialog.ScaffoldInformations;
+			import com.remote.RemoteControl;
+			
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			
+			/**
+			 * 
+			 */
+			private var connection:NetConnection;
+			
+			/**
+			 * 
+			 */
+			private var contig_obj:Object;
+			
+			private var contig_id:int;
+			
+			public function init(contig:Object):void 
+			{
+				CursorManager.setBusyCursor();
+				this.contig_obj = contig;
+				this.contig_id = contig.id;
+				this.title = this.title + " (ID = " + String(contig.id) + ")"
+				
+				id_label.text = String(contig.id);
+				scaffold_id.text = String(contig.scaff_id);
+				start_bp_label.text = String(contig.start);
+				end_bp_label.text = String(contig.end);
+				if(String(contig.sequence).length < 60000)
+					sequence_text_area.text = String(contig.sequence);
+				else
+					sequence_text_area.text = "Sequence of contig is too long! Click below and download it on your computer.";
+				
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+				
+				length_bp.text = String(contig.length_bp);
+				order.text = String(contig.order);
+				CursorManager.removeBusyCursor();
+			}
+			
+			public function initByID(cont_id:int):void
+			{
+				this.contig_id = cont_id;
+				
+				CursorManager.setBusyCursor();
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+				
+				connection.call("contig.get", new Responder(onGetContig, onFaultGetContig), int(cont_id));
+			}
+			
+			/**
+			 * 
+			 */
+			private function onGetContig(contig:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				
+				this.init(contig);
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultGetContig(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie ContigInformations podczas pobierania obiektu contigu!");
+				trace("Blad: " + obj);
+			}
+			
+			private function onShowScaffEvent():void
+			{
+				var scaffold_informations:ScaffoldInformations = new ScaffoldInformations();
+				PopUpManager.addPopUp(scaffold_informations, this, false);
+				PopUpManager.centerPopUp(scaffold_informations);
+				scaffold_informations.initByID(String(this.contig_obj.scaff_id));
+			}
+			
+			private function onMarkersEvent():void
+			{
+				var markers_dialog:MarkersOnContig = new MarkersOnContig();
+				PopUpManager.addPopUp(markers_dialog, this, false);
+				PopUpManager.centerPopUp(markers_dialog);
+				markers_dialog.init(this.contig_obj.id);		
+			}
+			
+			private function onDeleteButtonClicked():void
+			{
+				Alert.show("Are you sure you want to delete this contig?", "Confirm delete contig", Alert.YES | Alert.NO, this, deleteContigHandler, null, Alert.NO);
+			}
+			
+			private function deleteContigHandler(event:CloseEvent):void
+			{
+				if(event.detail == Alert.YES)
+				{
+					CursorManager.setBusyCursor();
+					connection.call("contig.delete", new Responder(onDeleteContig, onFaultDeleteContig), this.contig_id);
+					
+					PopUpManager.removePopUp(this);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onDeleteContig(contig:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Contig deleted successfully! Click again on scaffold to refresh!", "Success");
+				//TODO: Przeslanie do widoku informacji o usunieciu contiga - do scaffoldCanvas zeby wyrzucil contiga
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultDeleteContig(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie ContigInformations podczas usuwania obiektu contigu!");
+				trace("Blad: " + obj);
+			}
+			
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			private function onDownloadEvent():void
+			{
+				fileReference.save(String(this.contig_obj.sequence), "contig" + this.contig_obj.scaff_id + ".txt");
+			}
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<fx:Declarations>
+		<net:FileReference id="fileReference" />
+		<mx:WipeLeft id = 'wipe_left' />
+	</fx:Declarations>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+
+	<mx:VBox label = 'Contigs informations' width="100%" height="100%">
+		<mx:HDividedBox width="100%" height="100%">
+			<mx:Form borderStyle="solid" width="100%" height="100%">
+				<mx:FormItem label="ID" labelStyleName="labelStyle">
+					<mx:TextInput id="id_label" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Scaffold ID" labelStyleName="labelStyle">
+					<mx:TextInput id="scaffold_id" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem>
+					<mx:Button id="show_scaffold_button" 
+							   label="Show scaffold informations" 
+							   click="onShowScaffEvent();"/>
+				</mx:FormItem>
+				<mx:FormItem label="Position start (bp)" labelStyleName="labelStyle">
+					<mx:TextInput id="start_bp_label" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Position end (bp)" labelStyleName="labelStyle">
+					<mx:TextInput id="end_bp_label" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Length (bp)" labelStyleName="labelStyle">
+					<mx:TextInput id="length_bp" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Order" labelStyleName="labelStyle">
+					<mx:TextInput id="order" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem>
+					<mx:Button id="markers_button" 
+							   label="List of markers" 
+							   width="{id_label.width}"
+							   click="onMarkersEvent();"/>
+				</mx:FormItem>
+				<mx:FormItem>
+					<mx:Button id="delete_button" 
+							   label="Delete contig" 
+							   width="{id_label.width}"
+							   click="onDeleteButtonClicked();"/>
+				</mx:FormItem>
+				<mx:FormItem>
+					<mx:Button id="close_button" 
+							   label="Close" 
+							   width="{id_label.width}"
+							   click="onCloseEvent();"/>
+				</mx:FormItem>
+			</mx:Form>
+			
+			<s:VGroup width="100%" height="100%">
+				<mx:TextArea id="sequence_text_area" width="100%" height="100%" editable="false">
+				</mx:TextArea>
+		
+				<mx:Button id="download_button" 
+							   label="Download" 
+							   width="{id_label.width}"
+							   click="onDownloadEvent();" enabled="true"/>
+			</s:VGroup>
+		</mx:HDividedBox>
+	</mx:VBox>
+</s:TitleWindow>

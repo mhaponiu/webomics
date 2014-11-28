@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   width="442" height="251" close="onCloseEvent();" title="SW Results">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.config.Config;
+			
+			import com.remote.RemoteControl;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			
+			import spark.events.IndexChangeEvent;
+			
+			/**
+			 * 
+			 */
+			private var connection:NetConnection;
+			
+			/**
+			 * 
+			*/
+			private var pattern:String;
+			
+			[Bindable]
+			private var scaffoldsArray:ArrayCollection;
+			
+			[Bindable]
+			private var udefScaffoldsArray:ArrayCollection;
+			
+			[Bindable]
+			private var contigsArray:ArrayCollection;
+			
+			/**
+			 * 
+			 */
+			public function init(scaffolds:Array, udef_scaffolds:Array, contigs:Array, pattern:String):void 
+			{
+				CursorManager.setBusyCursor();
+				
+				this.pattern = pattern;
+				
+				// Ustawienia interfejsu
+				show_scaff.enabled = false;
+				show_cont.enabled = false;
+				show_udef_scaff.enabled = false;
+				
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+
+				//trace("Scaffs:" + scaffolds);
+				
+				// Uzupelniamy listy
+				scaffoldsArray = new ArrayCollection(scaffolds);
+				udefScaffoldsArray = new ArrayCollection(udef_scaffolds);
+				contigsArray = new ArrayCollection(contigs);
+				
+				CursorManager.removeBusyCursor();
+			}
+			
+			/**
+			 * 
+			 */
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function okButtonClicked(event:MouseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function scaffsListChanged(event:IndexChangeEvent):void
+			{
+				if(scaffs_list.selectedIndex != -1)
+					show_scaff.enabled = true;
+				else
+					show_scaff.enabled = false;
+			}
+			
+			/**
+			 * 
+			 */
+			protected function contsListChanged(event:IndexChangeEvent):void
+			{
+				if(conts_list.selectedIndex != -1)
+					show_cont.enabled = true;
+				else
+					show_cont.enabled = false;
+			}
+			
+			/**
+			 * 
+			 */
+			protected function udefScaffsListChanged(event:IndexChangeEvent):void
+			{
+				if(udef_scaffs_list.selectedIndex != -1)
+					show_udef_scaff.enabled = true;
+				else
+					show_udef_scaff.enabled = false;
+			}
+			
+			/**
+			 * 
+			 */
+			protected function showScaffold(event:MouseEvent):void
+			{
+
+			}
+			
+			/**
+			 * 
+			 */
+			protected function showContig(event:MouseEvent):void
+			{
+
+			}
+			
+			/**
+			 * 
+			 */
+			protected function showUdefScaffold(event:MouseEvent):void
+			{
+
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+	<s:HGroup width="430" height="176">
+		<s:Form>
+			<s:FormItem label="Scaffolds:">
+				<s:DropDownList id="scaffs_list" change="scaffsListChanged(event)"
+								dataProvider="{scaffoldsArray}"></s:DropDownList>
+			</s:FormItem>
+			<s:FormItem label="Contigs:">
+				<s:DropDownList id="conts_list"  change="contsListChanged(event)"
+								dataProvider="{contigsArray}"></s:DropDownList>
+			</s:FormItem>
+			<s:FormItem label="Undefined scaffolds">
+				<s:DropDownList id="udef_scaffs_list"  change="udefScaffsListChanged(event)"
+								dataProvider="{udefScaffoldsArray}"></s:DropDownList>
+			</s:FormItem>
+		</s:Form>
+		<s:VGroup width="115" height="173">
+			<s:Spacer width="10" height="15"/>
+			<s:Button id="show_scaff" label="Show" click="showScaffold(event)"/>
+			<s:Spacer width="10" height="13"/>
+			<s:Button id="show_cont" label="Show" click="showContig(event)"/>
+			<s:Spacer width="10" height="15"/>
+			<s:Button id="show_udef_scaff" label="Show" click="showUdefScaffold(event)"/>
+		</s:VGroup>
+	</s:HGroup>
+	<s:HGroup width="428" height="27">
+		<s:Spacer width="182" height="13"/>
+		<s:Button label="OK" click="okButtonClicked(event)"/>
+	</s:HGroup>
+</s:TitleWindow>

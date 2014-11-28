@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx" xmlns:s="library://ns.adobe.com/flex/spark" xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   title="Undefined scaffold details" width="800" close="onCloseEvent();">
+	
+	<fx:Script>
+		<![CDATA[
+			import mx.managers.PopUpManager;
+			import mx.managers.CursorManager;
+			import com.config.Config;
+			import mx.controls.Alert;
+			
+			public function init(scaffold:Object):void 
+			{
+				CursorManager.setBusyCursor();
+				id_label.text = String(scaffold.scaff_id);
+				sequence_text_area.text = String(scaffold.sequence);
+				start_bp_label.text = String(scaffold.start_bp + 1);
+				end_bp_label.text = String(scaffold.end_bp + 1);
+				if(scaffold.assemb_type == Config.ARACHNE)
+					assembling_label.text = "Arachne";
+				else
+					assembling_label.text = "Celera";
+				length_bp.text = String(scaffold.length_all_bp);
+				CursorManager.removeBusyCursor();
+			}
+			
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+	<mx:HDividedBox width="100%" height="100%">
+		<mx:Form borderStyle="solid" width="100%" height="100%">
+			<mx:FormItem label="ID" labelStyleName="labelStyle">
+				<mx:TextInput id="id_label" editable="false"/>
+			</mx:FormItem>
+			<mx:FormItem label="Position start (bp)" labelStyleName="labelStyle">
+				<mx:TextInput id="start_bp_label" editable="false"/>
+			</mx:FormItem>
+			<mx:FormItem label="Position end (bp)" labelStyleName="labelStyle">
+				<mx:TextInput id="end_bp_label" editable="false"/>
+			</mx:FormItem>
+			<mx:FormItem label="Assembling" labelStyleName="labelStyle">
+				<mx:TextInput id="assembling_label" editable="false"/>
+			</mx:FormItem>
+			<mx:FormItem label="Scaffold length (bp)" labelStyleName="labelStyle">
+				<mx:TextInput id="length_bp" editable="false"/>
+			</mx:FormItem>
+			<mx:FormItem>
+				<mx:Button id="close_button" 
+						   label="Close" 
+						   click="onCloseEvent();"/>
+			</mx:FormItem>
+		</mx:Form>
+		
+		<s:VGroup width="100%" height="100%">
+			<mx:TextArea id="sequence_text_area" width="100%" height="100%" editable="False">
+			</mx:TextArea>
+		</s:VGroup>
+	</mx:HDividedBox>
+</s:TitleWindow>

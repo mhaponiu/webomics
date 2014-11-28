@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   width="426" height="521" close="onCloseEvent();" title="Search the same sequence">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.config.Config;
+			import com.dialog.ReadFile;
+			import com.dialog.ResultsKMP;
+			import com.dialog.RunWithProgressBar;
+			import com.event.ProgressResultEvent;
+			import com.event.ReadFileEvent;
+			import com.remote.RemoteControl;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.utils.ArrayUtil;
+			
+			/**
+			 * 
+			 */
+			private var connection:NetConnection;
+			
+			/**
+			 * 
+			 */
+			private var pattern:String;
+			
+			/**
+			 * 
+			 */
+			public function init():void 
+			{
+				CursorManager.setBusyCursor();
+				
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+
+				// TESTOWO
+				seq_text_area.text = "ACAATGAGTTGGTCAGA";
+				
+				CursorManager.removeBusyCursor();
+			}
+			
+			/**
+			 * 
+			 */
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function radioButtonChanged(event:MouseEvent):void
+			{
+				if (seq_text_radio_button.selected == true) 
+				{
+					seq_text_area.enabled = true;
+				} 
+				else if (file_radio_button.selected == true) 
+				{
+					seq_text_area.enabled = false;
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			protected function cancelButtonClicked(event:MouseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function okButtonClicked(event:MouseEvent):void
+			{	
+				if (seq_text_radio_button.selected == true) 
+				{
+					CursorManager.setBusyCursor();
+					
+					this.pattern = seq_text_area.text;
+					
+					// Liczymy...
+					if(algo_kmp.selected == true)
+						connection.call("algorithm.findProgressKMP", new Responder(foundKMP, onFaultKMP), this.pattern, this.getStructuresString());
+					else
+						connection.call("algorithm.findProgressBM", new Responder(foundBM, onFaultBM), this.pattern, this.getStructuresString());
+					PopUpManager.removePopUp(this);
+				} 
+				else if (file_radio_button.selected == true) 
+				{
+					// Odczytujemy plik i postepujemy identycznie jak wyzej, jezeli kilka sekwencji uruchamiamy algorytm kilka razy
+					var read_file:ReadFile = new ReadFile();
+					PopUpManager.addPopUp(read_file, this, false);
+					PopUpManager.centerPopUp(read_file);
+					read_file.addEventListener(ReadFileEvent.TYPE, onReadFile);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function getStructuresString() : String
+			{
+				var ret : String = "";
+				
+				if(struct_all.selected == true)
+				{
+					ret += struct_all.name.toString();
+				}
+				if(struct_scaffs.selected == true)
+				{
+					ret += struct_scaffs.name.toString();
+				}
+				if(struct_conts.selected == true)
+				{
+					ret += struct_conts.name.toString();
+				}
+				if(struct_uscaffs.selected == true)
+				{
+					ret += struct_uscaffs.name.toString();
+				}
+				
+				return ret;
+			}
+			
+			/**
+			 * 
+			 */
+			private function onReadFile(event:ReadFileEvent):void
+			{
+				CursorManager.setBusyCursor();
+				
+				var patterns : Array = new Array();
+				var text : String = event.getText();
+				trace("ODCZYTALEM:\n" + text);
+				
+				patterns = ReadFile.parseFasta(text);
+				for(var j : uint = 0; j < patterns.length; ++j)
+					trace(patterns[j]['id'] + " --> " + patterns[j]['seq']);
+
+				// Uruchomienie algorytmu dla kazdej sekwencji
+				for(var i : uint = 0; i < patterns.length; ++i)
+				{
+					if(algo_kmp.selected == true)
+						connection.call("algorithm.findProgressKMP", new Responder(foundKMP, onFaultKMP), patterns[i]['seq']);
+					else
+						connection.call("algorithm.findProgressBM", new Responder(foundBM, onFaultBM), patterns[i]['seq']);
+				}
+				
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			private function textAreaChange(evt:Event):void 
+			{
+				var ta:TextArea = evt.currentTarget as TextArea;
+				progressBar.setProgress(ta.length, ta.maxChars);
+			}
+			
+			/**
+			 * 
+			 */
+			private function foundKMP(obj:Object):void
+			{
+				var progress:RunWithProgressBar = new RunWithProgressBar();
+				PopUpManager.addPopUp(progress, this, false);
+				PopUpManager.centerPopUp(progress);
+				progress.addEventListener(ProgressResultEvent.TYPE, onFoundKMP);
+				progress.run(int(obj));
+			}
+			
+			private function onFoundKMP(event:ProgressResultEvent):void
+			{
+				var result:Object = event.getResult();
+				CursorManager.removeBusyCursor();
+				if(result[0] == false)
+				{
+					trace(result[1]);
+					Alert("Something went wrong. Application says that:\n" + result[1]);
+				}
+				else
+				{
+					// ... i otwieramy okno z wynikami
+					var results_kmp:ResultsKMP = new ResultsKMP();
+					PopUpManager.addPopUp(results_kmp, this, false);
+					PopUpManager.centerPopUp(results_kmp);
+					results_kmp.init(ArrayUtil.toArray(result[1]), this.pattern);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultKMP(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie SearchSameSequence podczas dzialania algorytmu KMP!");
+				trace("Blad: " + obj);
+			}
+			
+			/**
+			 * 
+			 */
+			private function foundBM(obj:Object):void
+			{
+				var progress:RunWithProgressBar = new RunWithProgressBar();
+				PopUpManager.addPopUp(progress, this, false);
+				PopUpManager.centerPopUp(progress);
+				progress.addEventListener(ProgressResultEvent.TYPE, onFoundBM);
+				progress.run(int(obj));
+			}
+			
+			private function onFoundBM(event:ProgressResultEvent):void
+			{
+				var result:Object = event.getResult();
+				CursorManager.removeBusyCursor();
+				if(result[0] == false)
+				{
+					trace(result[1]);
+					Alert("Something went wrong. Application says that:\n" + result[1]);
+				}
+				else
+				{
+					// ... i otwieramy okno z wynikami
+					var results_bm:ResultsBM = new ResultsBM();
+					PopUpManager.addPopUp(results_bm, this, false);
+					PopUpManager.centerPopUp(results_bm);
+					results_bm.init(ArrayUtil.toArray(result[1]), this.pattern);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultBM(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie SearchSameSequence podczas dzialania algorytmu BM!");
+				trace("Blad: " + obj);
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+	<fx:Declarations>
+		<s:RadioButtonGroup id="radiogroup1"/>
+		<s:RadioButtonGroup id="radiogroup2"/>
+		<s:RadioButtonGroup id="radiogroup3"/>
+	</fx:Declarations>
+	<s:Form width="410">
+		<s:FormHeading label="Algorithm:"/>
+		<s:RadioButton id = "algo_kmp" groupName="radiogroup2" label="Knuth-Morris-Pratt" selected="true"/>
+		<s:RadioButton id = "algo_bm" groupName="radiogroup2" label="Boyer-Moore"/>
+	</s:Form>
+	<s:Form width="410">
+		<s:FormHeading label="Search in:"/>
+		<s:RadioButton id = "struct_all" groupName="radiogroup3" name = "A" label="All structures"/>
+		<s:RadioButton id = "struct_scaffs" groupName="radiogroup3" name = "S" label="Scaffolds" selected="true"/>
+		<s:RadioButton id = "struct_conts" groupName="radiogroup3" name = "C" label="Contigs"/>
+		<s:RadioButton id = "struct_uscaffs" groupName="radiogroup3" name = "U" label="Undefined scaffolds"/>
+	</s:Form>
+	<mx:HRule width="410" height="2"/>
+	<s:RadioButton id="seq_text_radio_button" groupName="radiogroup1" label="Enter the sequence:"
+				   click="radioButtonChanged(event)" selected="true" value="seq"/>
+	<mx:TextArea id="seq_text_area" width="413" height="71" change="textAreaChange(event);"
+				 enabled="true" maxChars="1000" restrict="GgCcTtAanN"/>
+	<mx:ControlBar width="412">
+		<mx:ProgressBar id="progressBar"
+						mode="manual"
+						minimum="0"
+						maximum="{seq_text_area.maxChars}"
+						label="%1 of %2 characters (%3%%)"
+						labelPlacement="center"
+						width="100%" />
+	</mx:ControlBar>
+	<s:RadioButton id = "file_radio_button" groupName="radiogroup1" label="Or choose the file in fasta format..." value = "file" click="radioButtonChanged(event)"/>
+	<s:HGroup width="177" height="40">
+		<s:Spacer width="240" height="12"/>
+		<s:Button id = "cancel_button" label="Cancel" click="cancelButtonClicked(event)"/>
+		<s:Button id = "ok_button" label="OK" click="okButtonClicked(event)"/>
+	</s:HGroup>
+</s:TitleWindow>

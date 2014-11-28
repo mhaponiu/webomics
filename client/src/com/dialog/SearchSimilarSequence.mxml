@@ -1,0 +1,492 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   width="426" height="651" close="onCloseEvent();" title="Search Sequence">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.config.Config;
+			import com.dialog.ResultsSimilar;
+			import com.dialog.RunWithProgressBar;
+			import com.event.ProgressResultEvent;
+			import com.event.ReadFileEvent;
+			import com.remote.RemoteControl;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.utils.ArrayUtil;
+			
+			import spark.events.IndexChangeEvent;
+			
+			/**
+			 * 
+			 */
+			private var connection:NetConnection;
+
+			
+			/**
+			 * 
+			 */
+			private var pattern:String;
+			
+			/**
+			 * 
+			 */
+			private var algorithms:ArrayCollection = new ArrayCollection(
+				[ {label:"Smidth - Watterman", data:0}, 
+					{label:"BLAST", data:1},
+					{label:"BLAST with Smidth - Watterman", data:2}]);
+			
+			/**
+			 * 
+			 */
+			public function init():void 
+			{
+				CursorManager.setBusyCursor();
+				
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+				
+				// TESTOWO
+				seq_text_area.text = "GCAAACCGGUUUGGCCAAGGCAAC";
+				
+				// Ustawienie parametrow dodatkowych
+				additional_panel.visible = false;
+				first_param_value.maximum = 999;
+				second_param_value.maximum = 999.00;
+				third_param_value.maximum = 999;
+				fourth_param_value.maximum = 999;
+				
+				ok_button.enabled = false;
+				
+				CursorManager.removeBusyCursor();
+			}
+			
+			/**
+			 * 
+			 */
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function selectAlgorithmChanged(event:IndexChangeEvent):void
+			{				
+				ok_button.enabled = true;
+				
+				if(algorithm_combo_box.selectedItem.data == 0)	// SW
+				{
+					additional_panel.visible = true;
+					additional_panel.enabled = true;
+					
+					first_param.label = "Match cost";
+					first_param_value.minimum = -10;
+					first_param_value.value = 2;
+					
+					second_param.label = "Mismatch cost";
+					second_param_value.stepSize = 1.00;
+					second_param_value.minimum = -30.00;
+					second_param_value.value = -1.00;
+					
+					third_param.label = "Gap open cost";
+					third_param_value.minimum = -30;
+					third_param_value.value = -3;
+					
+					fourth_param.label = "Gap extend cost";
+					fourth_param_value.minimum = -30;
+					fourth_param_value.value = -1;
+				}
+				else if(algorithm_combo_box.selectedItem.data == 1)	// BLAST
+				{
+					additional_panel.visible = true;
+					additional_panel.enabled = true;
+					
+					first_param.label = "Parameter W";
+					first_param_value.minimum = 3;
+					first_param_value.value = 11;
+					
+					second_param.label = "Parameter T";
+					second_param_value.stepSize = 0.01;
+					second_param_value.minimum = 0.00;
+					second_param_value.value = 0.05;
+					
+					third_param.label = "Parameter C";
+					third_param_value.minimum = 3;
+					third_param_value.value = 5;
+					
+					fourth_param.label = "Cut off";
+					fourth_param_value.minimum = 1;
+					fourth_param_value.value = 10;
+				}
+				else if(algorithm_combo_box.selectedItem.data == 2)	// BLAST_SW
+				{
+					additional_panel.visible = true;
+					additional_panel.enabled = true;
+					
+					first_param.label = "Parameter W";
+					first_param_value.minimum = 3;
+					first_param_value.value = 11;
+					
+					second_param.label = "Parameter T";
+					second_param_value.stepSize = 0.01;
+					second_param_value.minimum = 0.00;
+					second_param_value.value = 0.05;
+					
+					third_param.label = "Parameter C";
+					third_param_value.minimum = 3;
+					third_param_value.value = 5;
+					
+					fourth_param.label = "Cut off";
+					fourth_param_value.minimum = 1;
+					fourth_param_value.value = 10;
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			protected function cancelButtonClicked(event:MouseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function radioButtonChanged(event:MouseEvent):void
+			{
+				if (seq_text_radio_button.selected == true) 
+				{
+					file_browser_button.enabled = false;
+					seq_text_area.enabled = true;
+					if(seq_text_area.length == 0)
+						ok_button.enabled = false;
+					else
+						ok_button.enabled = true;
+				} 
+				else if (file_radio_button.selected == true) 
+				{
+					file_browser_button.enabled = true;
+					seq_text_area.enabled = false;
+					ok_button.enabled = true;
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			protected function okButtonClicked(event:MouseEvent):void
+			{				
+				if (seq_text_radio_button.selected == true) 
+				{
+					CursorManager.setBusyCursor();
+					
+					this.pattern = seq_text_area.text;
+					
+					if(algorithm_combo_box.selectedItem.data == 0)	// SW
+					{
+						// Liczymy...
+						connection.call("algorithm.searchProgressSW", new Responder(foundSW, onFaultSW), this.pattern, int(first_param_value.value), int(second_param_value.value), int(third_param_value.value), int(fourth_param_value.value), this.getStructuresString());
+					}
+					else if(algorithm_combo_box.selectedItem.data == 1)	// BLAST
+					{
+						// Liczymy...
+						connection.call("algorithm.findProgressBLAST", new Responder(foundBLAST, onFaultBLAST), this.pattern, int(first_param_value.value), int(second_param_value.value), int(third_param_value.value), int(fourth_param_value.value), this.getStructuresString());
+					}
+					else if(algorithm_combo_box.selectedItem.data == 2)	// BLAST_SW
+					{
+						// Liczymy...
+						connection.call("algorithm.findProgressBLAST_SW", new Responder(foundBLAST_SW, onFaultBLAST_SW), this.pattern, int(first_param_value.value), int(second_param_value.value), int(third_param_value.value), int(fourth_param_value.value), this.getStructuresString());
+					}
+					
+					PopUpManager.removePopUp(this);
+				} 
+				else if (file_radio_button.selected == true) 
+				{
+					// Odczytujemy plik i postepujemy identycznie jak wyzej, jezeli kilka sekwencji uruchamiamy algorytm kilka razy
+					var read_file:ReadFile = new ReadFile();
+					PopUpManager.addPopUp(read_file, this, false);
+					PopUpManager.centerPopUp(read_file);
+					read_file.addEventListener(ReadFileEvent.TYPE, onReadFile);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onReadFile(event:ReadFileEvent):void
+			{
+				CursorManager.setBusyCursor();
+				
+				var patterns : Array = new Array();
+				var text : String = event.getText();
+				trace("ODCZYTALEM:\n" + text);
+				
+				patterns = ReadFile.parseFasta(text);
+				for(var j : uint = 0; j < patterns.length; ++j)
+					trace(patterns[j]['id'] + " --> " + patterns[j]['seq']);
+				
+				// Uruchomienie algorytmu dla kazdej sekwencji
+				for(var i : uint = 0; i < patterns.length; ++i)
+				{
+					if(algorithm_combo_box.selectedItem.data == 0)	// SW
+					{
+						// Liczymy...
+						connection.call("algorithm.searchProgressSW", new Responder(foundSW, onFaultSW), patterns[i]['seq'], int(first_param_value.value), int(second_param_value.value), int(third_param_value.value), int(fourth_param_value.value));
+					}
+					else if(algorithm_combo_box.selectedItem.data == 1)	// BLAST
+					{
+						// Liczymy...
+						connection.call("algorithm.findProgressBLAST", new Responder(foundBLAST, onFaultBLAST), patterns[i]['seq'], int(first_param_value.value), int(second_param_value.value), int(third_param_value.value), int(fourth_param_value.value));
+					}
+					else if(algorithm_combo_box.selectedItem.data == 2)	// BLAST_SW
+					{
+						// Liczymy...
+						connection.call("algorithm.findProgressBLAST_SW", new Responder(foundBLAST_SW, onFaultBLAST_SW), this.pattern, int(first_param_value.value), int(second_param_value.value), int(third_param_value.value), int(fourth_param_value.value), this.getStructuresString());
+					}
+				}
+				
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			private function getStructuresString() : String
+			{
+				var ret : String = "";
+				
+				if(struct_all.selected == true)
+				{
+					ret += struct_all.name;
+				}
+				if(struct_scaffs.selected == true)
+				{
+					ret += struct_scaffs.name;
+				}
+				if(struct_conts.selected == true)
+				{
+					ret += struct_conts.name;
+				}
+				if(struct_uscaffs.selected == true)
+				{
+					ret += struct_uscaffs.name;
+				}
+				
+				return ret;
+			}
+			
+			/**
+			 * 
+			 */
+			private function foundSW(obj:Object):void
+			{
+				var progress:RunWithProgressBar = new RunWithProgressBar();
+				PopUpManager.addPopUp(progress, this, false);
+				PopUpManager.centerPopUp(progress);
+				progress.addEventListener(ProgressResultEvent.TYPE, onFoundSW);
+				progress.run(int(obj));	
+			}
+			
+			private function onFoundSW(event:ProgressResultEvent):void
+			{
+				var result:Object = event.getResult();
+				CursorManager.removeBusyCursor();
+				if(result[0] == false)
+				{
+					trace("SW:\t" + String(result[1]));
+					Alert.show("Something went wrong. Application says that:\n" + String(result[1]), "Error");
+				}
+				else
+				{
+					// ... i otwieramy okno z wynikami
+					var results_sw:ResultsSimilar = new ResultsSimilar();
+					PopUpManager.addPopUp(results_sw, this, false);
+					PopUpManager.centerPopUp(results_sw);
+					results_sw.init(result[1], this.pattern);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultSW(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie SearchSimilarSequence podczas dzialania algorytmu SW!");
+				trace("Blad: " + obj);
+			}
+			
+			/**
+			 * 
+			 */
+			private function foundBLAST(obj:Object):void
+			{
+				var progress:RunWithProgressBar = new RunWithProgressBar();
+				PopUpManager.addPopUp(progress, this, false);
+				PopUpManager.centerPopUp(progress);
+				progress.addEventListener(ProgressResultEvent.TYPE, onFoundBLAST);
+				progress.run(int(obj));	
+			}
+			
+			private function onFoundBLAST(event:ProgressResultEvent):void
+			{
+				var result:Object = event.getResult();
+				CursorManager.removeBusyCursor();
+				if(result[0] == false)
+				{
+					trace("BLAST:\t" + String(result[1]));
+					Alert.show("Something went wrong. Application says that:\n" + String(result[1]), "Error");
+				}
+				else
+				{
+					// ... i otwieramy okno z wynikami
+					var results_blast:ResultsSimilar = new ResultsSimilar();
+					PopUpManager.addPopUp(results_blast, this, false);
+					PopUpManager.centerPopUp(results_blast);
+					results_blast.init(result[1], this.pattern);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultBLAST(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie SearchSimilarSequence podczas dzialania algorytmu BLAST!");
+				trace("Blad: " + obj);
+			}
+			
+			/**
+			 * 
+			 */
+			private function foundBLAST_SW(obj:Object):void
+			{
+				var progress:RunWithProgressBar = new RunWithProgressBar();
+				PopUpManager.addPopUp(progress, this, false);
+				PopUpManager.centerPopUp(progress);
+				progress.addEventListener(ProgressResultEvent.TYPE, onFoundBLAST_SW);
+				progress.run(int(obj));	
+			}
+			
+			private function onFoundBLAST_SW(event:ProgressResultEvent):void
+			{
+				var result:Object = event.getResult();
+				CursorManager.removeBusyCursor();
+				if(result[0] == false)
+				{
+					trace("BLAST_SW:\t" + String(result[1]));
+					Alert.show("Something went wrong. Application says that:\n" + String(result[1]), "Error");
+				}
+				else
+				{
+					// ... i otwieramy okno z wynikami
+					var results_blast_sw:ResultsSimilar = new ResultsSimilar();
+					PopUpManager.addPopUp(results_blast_sw, this, false);
+					PopUpManager.centerPopUp(results_blast_sw);
+					results_blast_sw.init(result[1], this.pattern);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultBLAST_SW(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie SearchSimilarSequence podczas dzialania algorytmu BLAST_SW!");
+				trace("Blad: " + obj);
+			}
+			
+			/**
+			 * 
+			 */
+			private function textAreaChange(evt:Event):void 
+			{
+				var ta:TextArea = evt.currentTarget as TextArea;
+				progressBar.setProgress(ta.length, ta.maxChars);
+				if(ta.length == 0)
+					ok_button.enabled = false;
+				else
+					ok_button.enabled = true;
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+	<fx:Declarations>
+		<s:RadioButtonGroup id="radiogroup1"/>
+	</fx:Declarations>
+	<s:Form width="413" height="47">
+		<s:FormItem width="409" height="37" label="Algorithm">
+			<s:ComboBox id="algorithm_combo_box" width="310" dataProvider="{algorithms}" change="selectAlgorithmChanged(event)"/>
+		</s:FormItem>
+	</s:Form>
+	<mx:HRule width="409" height="1"/>
+	<s:Form width="410" height="145">
+		<s:FormHeading label="Search in:"/>
+		<s:RadioButton id = "struct_all" name = "A" label="All structures" selected="true"/>
+		<s:RadioButton id = "struct_scaffs" name = "S" label="Scaffolds"/>
+		<s:RadioButton id = "struct_conts" name = "C" label="Contigs"/>
+		<s:RadioButton id = "struct_uscaffs" name = "U" label="Undefined scaffolds"/>
+	</s:Form>
+	<mx:HRule width="408" height="1"/>
+	<s:RadioButton id = "seq_text_radio_button" groupName="radiogroup1" label="Enter the sequence:" selected="true" value="seq" click="radioButtonChanged(event)"/>
+	<mx:TextArea id="seq_text_area" width="413" height="37" change="textAreaChange(event);"
+				 enabled="true" maxChars="1000" restrict="GgCcTtAanN"/>
+	<mx:ControlBar width="413" height="24">
+		<mx:ProgressBar id="progressBar"
+						mode="manual"
+						minimum="0"
+						maximum="{seq_text_area.maxChars}"
+						label="%1 of %2 characters (%3%%)"
+						labelPlacement="center"
+						width="100%" />
+	</mx:ControlBar>
+	<s:RadioButton id = "file_radio_button" groupName="radiogroup1" label="Or choose the file in fasta format:" value = "file" click="radioButtonChanged(event)"/>
+	<s:Button id = "file_browser_button" label="Browse file" enabled="false"/>
+	<mx:HRule width="413" height="1"/>
+	<s:Panel id = "additional_panel" width="413" height="200" title="Options">
+		<s:Form x="10" y="0" height="169">										<!--    SW                           BLAST 	-->
+			<s:FormItem id="first_param" height="33">							<!--   match                           w 	-->
+				<s:NumericStepper id = "first_param_value"/>		<!--  -10  2                           11	-->
+			</s:FormItem>
+			<s:FormItem id="second_param" height="34">						<!--  mismatch                         t 	-->
+				<s:NumericStepper id = "second_param_value"/>		<!--  -10 -1                           0.05 -->
+			</s:FormItem>
+			<s:FormItem id="third_param" height="33">							<!-- gap open                          c 	-->
+				<s:NumericStepper id = "third_param_value"/>		<!--  -10 -3                           5	-->
+			</s:FormItem>
+			<s:FormItem id="fourth_param" height="33">						<!-- gap extend                     cut_off -->
+				<s:NumericStepper id = "fourth_param_value"/>		<!--  -10 -1                             10	-->
+			</s:FormItem>
+		</s:Form>
+	</s:Panel>
+	<mx:HRule width="413" height="0"/>
+	<s:HGroup width="177" height="18">
+		<s:Spacer width="240" height="12"/>
+		<s:Button id = "cancel_button" label="Cancel" click="cancelButtonClicked(event)"/>
+		<s:Button id = "ok_button" label="OK" click="okButtonClicked(event)"/>
+	</s:HGroup>
+</s:TitleWindow>

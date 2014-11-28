@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   width="432" height="367" close="onCloseEvent();" title="Add new organism">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.config.Config;
+			import com.dialog.ContigInformations;
+			import com.dialog.ScaffoldInformations;
+			import com.event.NewOrganismEvent;
+			import com.remote.RemoteControl;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.utils.ArrayUtil;
+			
+			/**
+			 * 
+			 */
+			private var connection:NetConnection;
+			
+			/**
+			 * 
+			 */
+			public function init():void 
+			{
+				CursorManager.setBusyCursor();
+				
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+
+				CursorManager.removeBusyCursor();
+			}
+			
+			/**
+			 * 
+			 */
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+
+			/**
+			 * 
+			 */
+			protected function cancelButtonClicked(event:MouseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function okButtonClicked(event:MouseEvent):void
+			{				
+				CursorManager.setBusyCursor();
+				connection.call("organism.addOrganism", new Responder(onAddOrganism, onAddOrganismFault), organism_name.text, organism_desc.text, chromosomes_count.value);
+			}
+			
+			private function onAddOrganism(data:Object):void
+			{
+				if(data != null)
+					dispatchEvent(new NewOrganismEvent(int(data), organism_name.text, organism_desc.text));
+				else
+					Alert.show("Error while adding new organism!", "Error!");
+				
+				CursorManager.removeBusyCursor();
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * Reakcja na bledne dzialanie komunikacji z serwerem aplikacji 
+			 */
+			private function onAddOrganismFault(event:FaultEvent):void
+			{
+				trace("Blad podczas dzialania aplikacji podczas dodawania organizmu.");
+				Alert.show(String(event.fault));
+				CursorManager.removeBusyCursor();
+			}
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+	<fx:Declarations>
+		<s:RadioButtonGroup id="radiogroup1"/>
+	</fx:Declarations>
+	<s:Form width="100%">
+		<s:FormItem width="100%" label="Name:">
+			<s:TextInput id="organism_name" width="278"/>
+		</s:FormItem>
+		<s:FormItem width="100%" label="Description:">
+			<s:TextArea id="organism_desc" width="280"/>
+		</s:FormItem>
+		<s:FormItem width="100%" label="Chromosomes:">
+			<s:NumericStepper id="chromosomes_count" minimum="1" value="1"/>
+		</s:FormItem>
+	</s:Form>
+	<s:HGroup width="144" height="20">
+		<s:Spacer width="210" height="18"/>
+		<s:Button id = "cancel_button" label="Cancel" click="cancelButtonClicked(event)"/>
+		<s:Button id = "ok_button" label="OK" click="okButtonClicked(event)"/>
+	</s:HGroup>
+</s:TitleWindow>

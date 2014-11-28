@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx" xmlns:s="library://ns.adobe.com/flex/spark" xmlns:fx="http://ns.adobe.com/mxml/2009" xmlns:net="flash.net.*"
+			   title="Marker details" width="930" height="450" close="onCloseEvent();">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.config.Config;
+			import com.dialog.ScaffoldInformations;
+			import com.dialog.ContigInformations;
+			import com.remote.RemoteControl;
+			
+			import mx.controls.Alert;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			
+			/**
+			 * 
+			 */
+			private var connection:NetConnection;
+			
+			/**
+			 * 
+			 */
+			private var marker_obj:Object;
+			
+			public function init(marker:Object):void 
+			{
+				CursorManager.setBusyCursor();
+				this.marker_obj = marker;
+				this.title = this.title + " (Name = " + String(marker.name) + ")"
+				
+				name_label.text = String(marker.name);
+				chr_id.text = String(marker.chr_id);
+				position_cm.text = String(marker.pos_cm);
+				scaffold_id.text = String(marker.scaff_id);
+				start_bp_scaff_label.text = String(marker.scaffold_start);
+				end_bp_scaff_label.text = String(marker.scaffold_end);
+				contig_id.text = String(marker.scaff_id);
+				start_bp_cont_label.text = String(marker.contig_start);
+				end_bp_cont_label.text = String(marker.contig_end);
+				if(String(marker.sequence).length < 60000)
+					sequence_text_area.text = String(marker.sequence);
+				else
+					sequence_text_area.text = "Sequence of marker is too long! Click below and download it on your computer.";
+				
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+
+				CursorManager.removeBusyCursor();
+			}
+			
+			public function initByName(mark_name:String):void
+			{
+				trace("MarkerInformation: initByName: " + String(mark_name));
+				CursorManager.setBusyCursor();
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+				
+				connection.call("marker.get", new Responder(onGetMarker, onFaultGetMarker), String(mark_name));
+			}
+			
+			/**
+			 * 
+			 */
+			private function onGetMarker(marker:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				
+				this.init(marker);
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultGetMarker(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie MarkerInformations podczas pobierania obiektu markera!");
+				trace("Blad: " + obj);
+			}
+			
+			private function onShowScaffEvent():void
+			{
+				var scaffold_informations:ScaffoldInformations = new ScaffoldInformations();
+				PopUpManager.addPopUp(scaffold_informations, this, false);
+				PopUpManager.centerPopUp(scaffold_informations);
+				scaffold_informations.initByID(String(this.marker_obj.scaff_id));
+			}
+			
+			private function onShowContEvent():void
+			{
+				var contig_informations:ContigInformations = new ContigInformations();
+				PopUpManager.addPopUp(contig_informations, this, false);
+				PopUpManager.centerPopUp(contig_informations);
+				contig_informations.initByID(this.marker_obj.cont_id);
+			}
+			
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			private function onDownloadEvent():void
+			{
+				fileReference.save(String(this.marker_obj.sequence), "contig" + this.marker_obj.scaff_id + ".txt");
+			}
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<fx:Declarations>
+		<net:FileReference id="fileReference" />
+		<mx:WipeLeft id = 'wipe_left' />
+	</fx:Declarations>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+
+	<mx:VBox label = 'Contigs informations' width="100%" height="100%">
+		<mx:HDividedBox width="100%" height="100%">
+			<mx:Form borderStyle="solid" width="100%" height="100%">
+				<mx:FormItem label="Name" labelStyleName="labelStyle">
+					<mx:TextInput id="name_label" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Chromosome ID" labelStyleName="labelStyle">
+					<mx:TextInput id="chr_id" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Position (cM)" labelStyleName="labelStyle">
+					<mx:TextInput id="position_cm" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Scaffold ID" labelStyleName="labelStyle">
+					<mx:TextInput id="scaffold_id" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem>
+					<mx:Button id="show_scaffold_button" 
+							   label="Show scaffold informations" 
+							   click="onShowScaffEvent();"/>
+				</mx:FormItem>
+				<mx:FormItem label="Position start on scaffold (bp)" labelStyleName="labelStyle">
+					<mx:TextInput id="start_bp_scaff_label" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Position end on scaffold (bp)" labelStyleName="labelStyle">
+					<mx:TextInput id="end_bp_scaff_label" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Contig ID" labelStyleName="labelStyle">
+					<mx:TextInput id="contig_id" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem>
+					<mx:Button id="show_contig_button" 
+							   label="Show contig informations" 
+							   click="onShowContEvent();"/>
+				</mx:FormItem>
+				<mx:FormItem label="Position start on contig (bp)" labelStyleName="labelStyle">
+					<mx:TextInput id="start_bp_cont_label" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Position end on contig (bp)" labelStyleName="labelStyle">
+					<mx:TextInput id="end_bp_cont_label" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem>
+					<mx:Button id="close_button" 
+							   label="Close" 
+							   width="{name_label.width}"
+							   click="onCloseEvent();"/>
+				</mx:FormItem>
+			</mx:Form>
+			
+			<s:VGroup width="100%" height="100%">
+				<mx:TextArea id="sequence_text_area" width="100%" height="100%" editable="false">
+				</mx:TextArea>
+		
+				<mx:Button id="download_button" 
+							   label="Download" 
+							   width="{name_label.width}"
+							   click="onDownloadEvent();" enabled="true"/>
+			</s:VGroup>
+		</mx:HDividedBox>
+	</mx:VBox>
+</s:TitleWindow>

@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   width="268" height="153" close="onCloseEvent();" title="Search marker by name">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.config.Config;
+			import com.remote.RemoteControl;
+			import com.dialog.MarkerInformations;
+
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.utils.ArrayUtil;
+			
+			/**
+			 * 
+			 */
+			private var connection:NetConnection;
+			
+			/**
+			 * 
+			 */
+			public function init():void 
+			{
+				CursorManager.setBusyCursor();
+				
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+
+				CursorManager.removeBusyCursor();
+			}
+			
+			/**
+			 * 
+			 */
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+
+			/**
+			 * 
+			 */
+			protected function cancelButtonClicked(event:MouseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+
+			/**
+			 * 
+			 */
+			protected function okButtonClicked(event:MouseEvent):void
+			{				
+				if(marker_name.text != "")
+				{
+					connection.call("marker.get", new Responder(onGetMarker, OnFaultGetMarker), String(marker_name.text));
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onGetMarker(data:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				
+				if(data != null)
+				{
+					var marker_informations:MarkerInformations = new MarkerInformations();
+					PopUpManager.addPopUp(marker_informations, this, false);
+					PopUpManager.centerPopUp(marker_informations);
+					marker_informations.init(data);
+				}
+				else
+				{
+					Alert.show("Searched marker does not exist.");
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function OnFaultGetMarker(obj:Object):void
+			{
+				Alert.show("Blad w dzialaniu aplikacji w oknie SearchMarkerByName podczas pobierania markera!");
+				trace("Blad: " + obj);
+			}
+
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+	<s:Form width="246">
+		<s:FormItem label="Name:">
+			<s:TextInput id="marker_name" width="150"/>
+		</s:FormItem>
+	</s:Form>
+	<s:HGroup width="144" height="20">
+		<s:Spacer width="49" height="14"/>
+		<s:Button id = "cancel_button" label="Cancel" click="cancelButtonClicked(event)"/>
+		<s:Button id = "ok_button" label="OK" click="okButtonClicked(event)"/>
+	</s:HGroup>
+</s:TitleWindow>

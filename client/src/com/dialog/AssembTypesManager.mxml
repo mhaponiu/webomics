@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   width="900" height="351" close="onCloseEvent();" title="Assembling types manager">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.ChromosomeView;
+			import com.config.Config;
+			import com.remote.RemoteControl;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.ListEvent;
+			import mx.events.DataGridEvent;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.utils.ArrayUtil;
+			
+			import spark.events.IndexChangeEvent;
+			
+			/**
+			 * 
+			 */
+			private var connection:NetConnection;
+			
+			[Bindable]
+			private var assembsCollection:ArrayCollection;
+			
+			/**
+			 * 
+			 */
+			private var organism_id:int = -1;
+			
+			private var assemb_index:int = -1;
+			
+			/**
+			 * 
+			 */
+			public function init(organism_id:int):void 
+			{
+				CursorManager.setBusyCursor();
+				
+				this.organism_id = organism_id;
+				
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+				
+				// Ustawienie interfejsu
+				new_button.enabled = true;
+				delete_button.enabled = false;
+				save_button.enabled = false;
+				
+				connection.call("chromosome.getAssembsDictFromOrganism", new Responder(onGetAssembs, onFaultGetAssembs), organism_id);
+				
+				CursorManager.removeBusyCursor();
+			}
+			
+			/**
+			 * 
+			 */
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function closeButtonClicked(event:MouseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function newAssembButtonClicked(event:MouseEvent):void
+			{
+				assembsCollection.addItem({'ID' : '-1', 'NAME' : '', 'DESC' : '', 'SCAFF_COUNT' : '0'});
+			}
+			
+			/**
+			 * 
+			 */
+			protected function deleteAssembButtonClicked(event:MouseEvent):void
+			{
+				assembsCollection.removeItemAt(assemb_index);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function saveButtonClicked(event:MouseEvent):void
+			{
+				//if(String(assembsCollection.getItemAt(assemb_index).NAME) != "")
+				//{
+					save_button.setStyle('chromeColor', '#74DF00');
+					connection.call("chromosome.updateAssembs", new Responder(onUpdateAssembs, onFaultUpdateAssembs), assembsCollection, this.organism_id);
+				//}
+				//else
+				//{
+					//TODO: Pokolorowanie na czerwono kratki w tabeli lub wysiwetlenie okienka informacyjnego
+				//}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onUpdateAssembs(data:ArrayCollection):void
+			{
+				CursorManager.setBusyCursor();
+				
+				// Wyczyszczenie tabeli
+				assembsCollection.removeAll();
+				
+				// Wyswietlenie nowych rezultatow
+				assembsCollection = data;
+				
+				CursorManager.removeBusyCursor();
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultUpdateAssembs(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie AssembTypesManager podczas uaktualniania typow asemblacji!");
+				trace("Blad: " + obj);
+			}
+			
+			/**
+			 * 
+			 */
+			private function onGetAssembs(data:Object):void
+			{
+				CursorManager.setBusyCursor();
+				
+				// Wyswietlenie rezultatow
+				assembsCollection = new ArrayCollection(ArrayUtil.toArray(data));
+				
+				CursorManager.removeBusyCursor();
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultGetAssembs(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie AssembTypesManager podczas pobierania typow asemblacji!");
+				trace("Blad: " + obj);
+			}
+			
+			private function buildToolTip(item:Object):String
+			{
+				var tip:String = "";
+				if (item != null)
+					tip = String(item.NAME);
+				return tip;
+			}
+			
+			private function itemClickEvent(event:ListEvent):void
+			{
+				assemb_index = int(event.rowIndex);
+				delete_button.enabled = true;
+				save_button.enabled = true;
+			}
+			
+			private function itemEditBegining(evt:DataGridEvent):void 
+			{
+				save_button.setStyle('chromeColor', '#FE2E2E');
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+	<s:HGroup width="100%" height="90%">
+		<mx:Panel title="Assembling types"
+				  width="100%"
+				  height="100%"
+				  layout="vertical"
+				  alpha="1.0">
+			<mx:DataGrid id="results_data_grid"
+						 itemClick="itemClickEvent(event);"
+						 itemRenderer="mx.controls.Label"
+						 editable="true"
+						 width="100%"
+						 height="100%"
+						 itemEditBegin="itemEditBegining(event);"
+						 dataProvider="{assembsCollection}"
+						 dataTipFunction="buildToolTip">
+				<mx:columns>
+					<mx:DataGridColumn headerText="ID"
+									   dataField="ID"
+									   headerRenderer="mx.controls.Label"
+									   width="80"
+									   editable="false"/>
+					<mx:DataGridColumn headerText="Name"
+									   dataField="NAME"
+									   headerRenderer="mx.controls.Label"
+									   width="150"
+									   showDataTips="true"
+									   editable="true"/>
+					<mx:DataGridColumn headerText="Description"
+									   dataField="DESC"
+									   headerRenderer="mx.controls.Label"
+									   showDataTips="true"
+									   editable="true"/>
+					<mx:DataGridColumn headerText="Scaffolds"
+									   dataField="SCAFF_COUNT"
+									   headerRenderer="mx.controls.Label"
+									   width="80"
+									   showDataTips="true"
+									   editable="false"/>
+				</mx:columns>
+			</mx:DataGrid>
+		</mx:Panel>	
+	</s:HGroup>
+	<s:HGroup width="100%" height="27">
+		<s:Spacer width="30%" height="13"/>
+		<s:Button id = "new_button" label="New assembling type" click="newAssembButtonClicked(event)"/>
+		<s:Button id = "delete_button" label="Delete assembling type" click="deleteAssembButtonClicked(event)"/>
+		<s:Button id = "save_button" label="Save changes" click="saveButtonClicked(event)"/>
+		<s:Button label="Close" click="closeButtonClicked(event)"/>
+	</s:HGroup>
+</s:TitleWindow>

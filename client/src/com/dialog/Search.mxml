@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   width="426" height="213" close="onCloseEvent();" title="Search in database">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.config.Config;
+			import com.dialog.SearchByID;
+			import com.dialog.SearchSameSequence;
+			import com.dialog.SearchSimilarSequence;
+			import com.dialog.SearchMarkerByName;
+			
+			import mx.controls.Alert;
+			import mx.events.ItemClickEvent;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			
+			import spark.events.IndexChangeEvent;
+			
+			private var choice:int;	// 0 - structsById, 1 - marksByName, 2 - seqs, 3 - the same seqs
+			
+			public function init():void 
+			{
+				CursorManager.setBusyCursor();
+				
+				next_button.enabled = false;
+				
+				CursorManager.removeBusyCursor();
+			}
+			
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			protected function nextButtonClicked(event:MouseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+				
+				switch (this.choice) 
+				{
+					case 0:	// Struktur po ID
+						var search_by_id_dialog:SearchByID = new SearchByID();
+						PopUpManager.addPopUp(search_by_id_dialog, this, true);
+						PopUpManager.centerPopUp(search_by_id_dialog);
+						search_by_id_dialog.init();
+						
+						break;
+					case 1:	// Markerów po nazwie
+						var search_maker_dialog:SearchMarkerByName = new SearchMarkerByName();
+						PopUpManager.addPopUp(search_maker_dialog, this, true);
+						PopUpManager.centerPopUp(search_maker_dialog);
+						search_maker_dialog.init();
+						
+						break;
+					case 2:	// Podobnych sekwencji (BLAST i SW)
+						var search_sim_dialog:SearchSimilarSequence = new SearchSimilarSequence();
+						PopUpManager.addPopUp(search_sim_dialog, this, true);
+						PopUpManager.centerPopUp(search_sim_dialog);
+						search_sim_dialog.init();
+						
+						break;
+					case 3:	// Identycznych sekwencji - KMP
+						var search_same_dialog:SearchSameSequence = new SearchSameSequence();
+						PopUpManager.addPopUp(search_same_dialog, this, true);
+						PopUpManager.centerPopUp(search_same_dialog);
+						search_same_dialog.init();
+						
+						break;
+				}
+			}
+			
+			protected function cancelButtonClicked(event:MouseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			private function radioButtonChanged(evt:ItemClickEvent):void 
+			{
+				next_button.enabled = true;
+				switch (evt.currentTarget.selectedValue) 
+				{
+					case "strucsByID":
+						this.choice = 0;
+						break;
+					case "marksByName":
+						this.choice = 1;
+						break;
+					case "seqs":
+						this.choice = 2;
+						break;
+					case "sameSeqs":
+						this.choice = 3;
+						break;
+				}
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+	<fx:Declarations>
+		<s:RadioButtonGroup id="search_buttons" itemClick="radioButtonChanged(event);"/>
+	</fx:Declarations>
+	<s:FormHeading label="What do you want to do?"/>
+	<s:HGroup width="200" height="97">
+		<s:Spacer width="86" height="19"/>
+		<s:VGroup width="200" height="96">
+			<s:RadioButton label="Search structures by ID" groupName="search_buttons" value="strucsByID"/>
+			<s:RadioButton label="Search markers by name" groupName="search_buttons" value="marksByName"/>
+			<s:RadioButton label="Search for similar sequences" groupName="search_buttons" value="seqs"/>
+			<s:RadioButton label="Search the same sequence" groupName="search_buttons" value="sameSeqs"/>
+		</s:VGroup>
+	</s:HGroup>
+	<s:HGroup width="414" height="26">
+		<s:Button label="Cancel" click="cancelButtonClicked(event)"/>
+		<s:Spacer width="261" height="26"/>
+		<s:Button id = "next_button" label="Next" click="nextButtonClicked(event)"/>
+	</s:HGroup>
+</s:TitleWindow>

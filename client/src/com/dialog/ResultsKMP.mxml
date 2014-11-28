@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   width="442" height="351" close="onCloseEvent();" title="Results KMP">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.ChromosomeView;
+			import com.config.Config;
+			import com.remote.RemoteControl;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.events.ListEvent;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.utils.ArrayUtil;
+			
+			import spark.events.IndexChangeEvent;
+			
+			/**
+			 * 
+			 */
+			private var connection:NetConnection;
+			
+			/**
+			 * 
+			 */
+			private var pattern:String;
+			
+			[Bindable]
+			private var resultsCollection:ArrayCollection;
+			
+			private var result_index:int = -1;
+			
+			/**
+			 * 
+			 */
+			public function init(data : Object, pattern:String):void 
+			{
+				CursorManager.setBusyCursor();
+				
+				this.pattern = pattern;
+				pattern_text_area.text = String(pattern);
+				
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+				
+				// Wyswietlenie rezultatow
+				resultsCollection = new ArrayCollection(ArrayUtil.toArray(data));
+				
+				// Ustawienie interfejsu
+				show_button.enabled = false;
+				
+				CursorManager.removeBusyCursor();
+			}
+			
+			/**
+			 * 
+			 */
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function cancelButtonClicked(event:MouseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function showButtonClicked(event:MouseEvent):void
+			{
+				var struct_type : String = String(resultsCollection.getItemAt(result_index).TYPE);
+				if(struct_type == "Scaffold")
+				{
+					var scaff_id : String = String(resultsCollection.getItemAt(result_index).ID);
+					trace("Clicked scaffold ID: " + scaff_id);
+					connection.call("scaffold.getChromosomeID", new Responder(onGetChromosomeID, onFaultGetChromosomeID), scaff_id);
+				}
+				else if(struct_type == "Contig")
+				{
+					// TODO: Obsluga i wyswietlenie contiga
+					var cont_id : String = String(resultsCollection.getItemAt(result_index).ID);
+					trace("Wybrano contiga o ID: " + cont_id);
+				}
+				else
+				{
+					trace("Wybrany typ jest nieznany: " + struct_type);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onGetChromosomeID(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				var chr_id : int = int(obj);
+				var scaff_id : String = String(resultsCollection.getItemAt(result_index).ID);
+				var start_index : Number = Number(resultsCollection.getItemAt(result_index).START_INDEX);
+				var end_index : Number = Number(resultsCollection.getItemAt(result_index).END_INDEX);
+				trace("Chromosome ID danego scaff: " + String(int(obj)));
+				var chromosome_dialog:ChromosomeView = new ChromosomeView();
+				PopUpManager.addPopUp(chromosome_dialog, this, true);
+				PopUpManager.centerPopUp(chromosome_dialog);
+				chromosome_dialog.initWithScaff(chr_id, scaff_id, start_index, end_index);
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultGetChromosomeID(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie ResultsKMP podczas pobierania ID chromosomu!");
+				trace("Blad: " + obj);
+			}
+			
+			private function buildToolTip(item:Object):String
+			{
+				var tip:String = "";
+				if (item != null)
+					tip = String(item.ID);
+				return tip;
+			}
+			
+			private function itemClickEvent(event:ListEvent):void
+			{
+				result_index = int(event.rowIndex);
+				show_button.enabled = true;
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+	<s:Form height="60" width="100%">
+		<s:FormItem height="60" width="100%" label="Pattern">
+			<s:TextArea id="pattern_text_area" height="40" width="100%" editable="false"></s:TextArea>
+		</s:FormItem>
+	</s:Form>
+	<s:HGroup width="100%" height="90%">
+		<mx:Panel title="Results"
+				  width="100%"
+				  height="100%"
+				  layout="vertical"
+				  alpha="1.0">
+			<mx:DataGrid id="results_data_grid"
+						 itemClick="itemClickEvent(event);"
+						 width="100%"
+						 height="100%"
+						 dataProvider="{resultsCollection}"
+						 dataTipFunction="buildToolTip">
+				<mx:columns>
+					<mx:DataGridColumn headerText="Type"
+									   dataField="TYPE"
+									   headerRenderer="mx.controls.Label"
+									   width="100"/>
+					<mx:DataGridColumn headerText="ID"
+									   dataField="ID"
+									   headerRenderer="mx.controls.Label"
+									   width="80"
+									   showDataTips="true"/>
+					<mx:DataGridColumn headerText="Start index"
+									   dataField="START_INDEX"
+									   headerRenderer="mx.controls.Label"
+									   width="80"
+									   showDataTips="true"/>
+					<mx:DataGridColumn headerText="End index"
+									   dataField="END_INDEX"
+									   headerRenderer="mx.controls.Label"
+									   width="80"
+									   showDataTips="true"/>
+				</mx:columns>
+			</mx:DataGrid>
+		</mx:Panel>	
+	</s:HGroup>
+	<s:HGroup width="100%" height="27">
+		<s:Spacer width="35%" height="13"/>
+		<s:Button label="Cancel" click="cancelButtonClicked(event)"/>
+		<s:Button id = "show_button" label="Show details" click="showButtonClicked(event)"/>
+	</s:HGroup>
+</s:TitleWindow>

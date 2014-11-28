@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark">
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		.label{
+			paddingLeft:3;
+			paddingTop:3;
+			paddingBottom:3;
+		}
+	</fx:Style>
+	<fx:Script>
+		<![CDATA[
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			
+			[Bindable]
+			public var messages:ArrayCollection = new ArrayCollection();
+ 
+			public function info(msg:String):void
+			{
+				add({message:msg, type:'info', color:0xFFFFFF});
+			}
+
+			public function warn(msg:String):void
+			{
+				add({message:msg, type:'warning', color:0xFFFFCC});
+			}
+			
+			public function error(msg:String):void
+			{
+				add({message:msg, type:'error', color:0xFF8C8C});
+			}
+			
+			private function add(msg:Object):void
+			{
+				messages.addItem(msg);
+			}
+		]]>
+	</fx:Script>
+
+	<s:PopUpAnchor id="statusPopup" popUpHeightMatchesAnchorHeight="false" 
+				   popUpWidthMatchesAnchorWidth="true" width="100%" popUpPosition="topLeft">
+		<s:popUp>
+			<s:List dataProvider="{messages}" labelField="message" textAlign="left" fontWeight="normal" maxHeight="200" 
+					click="statusPopup.displayPopUp=false" buttonMode="true">
+				<s:itemRenderer>
+					<fx:Component>
+						<s:ItemRenderer>
+							<s:Label text="{data.message}" backgroundColor="{data.color}" styleName="label" width="100%"/>	
+						</s:ItemRenderer>
+					</fx:Component>
+				</s:itemRenderer>
+			</s:List>
+				
+		</s:popUp>
+	</s:PopUpAnchor>
+	<s:Label text="{messages.getItemAt(messages.length-1).message}" buttonMode="true" 
+			 backgroundColor="{messages.getItemAt(messages.length-1).color}" width="100%"
+			 mouseDown="statusPopup.displayPopUp=true" styleName="label"/>
+</s:Group>

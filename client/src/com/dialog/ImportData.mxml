@@ -1,0 +1,310 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   width="426" height="327" close="onCloseEvent();" title="Import data">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.config.Config;
+			import com.dialog.ReadFile;
+			import com.dialog.RunWithProgressBar;
+			import com.event.ProgressResultEvent;
+			import com.event.ReadFileEvent;
+			import com.event.ImportEvent;
+			import com.remote.RemoteControl;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.utils.ArrayUtil;
+			
+			/**
+			 * 
+			 */
+			private var connection:NetConnection;
+			
+			[Bindable]
+			private var assembs_array : ArrayCollection;
+			
+			/**
+			 * 
+			 */
+			private var structures_type : uint;
+			
+			private var csv_structures : Array;
+			
+			private var fasta_structures : Array;
+			
+			private var organism_id : int;
+			
+			/**
+			 * 
+			 */
+			public function init(organism_id : int):void 
+			{
+				CursorManager.setBusyCursor();
+				
+				this.organism_id = organism_id;
+				
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+				
+				assembs_array = new ArrayCollection();
+				
+				connection.call("chromosome.getAssembsDictFromOrganism", new Responder(onGetAssembs, onFaultGetAssembs), organism_id);
+			}
+			
+			/**
+			 * 
+			 */
+			private function onGetAssembs(data:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				
+				var assembs_data : Array = ArrayUtil.toArray(data);
+				
+				// Wyswietlenie rezultatow
+				assembs_array = new ArrayCollection();
+				
+				for each (var ass_obj in assembs_data)
+				{
+					assembs_array.addItem({label:ass_obj['NAME'], data:ass_obj['ID']});
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultGetAssembs(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie ImportData podczas pobierania typow asemblacji!");
+				trace("Blad: " + obj);
+			}
+			
+			/**
+			 * 
+			 */
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function radioButtonChanged(event:MouseEvent):void
+			{
+				if (struct_scaffs_radio_button.selected == true) 
+				{
+					this.structures_type = 0;
+				} 
+				else if (struct_conts_radio_button.selected == true) 
+				{
+					this.structures_type = 1;
+				}
+				
+				select_csv_group.enabled = true;
+			}
+			
+			/**
+			 * 
+			 */
+			protected function cancelButtonClicked(event:MouseEvent):void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function okButtonClicked(event:MouseEvent):void
+			{	
+				CursorManager.setBusyCursor();
+				if (struct_scaffs_radio_button.selected == true) 
+				{
+					connection.call("import.importScaffolds", new Responder(onImportData, onFaultImportData), this.organism_id, assembs_combo_box.selectedItem.data, this.csv_structures, this.fasta_structures);
+				} 
+				else if (struct_conts_radio_button.selected == true) 
+				{
+					connection.call("import.importContigs", new Responder(onImportData, onFaultImportData), this.csv_structures, this.fasta_structures);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onImportData(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				
+				var status : int = int(obj);
+				trace("Status importu: " + status);
+
+				if(status == -1)	// Blad
+				{
+					Alert.show("Error while importing data! CSV and FSATA files are not coherent. Check it and try again.", "Error!");	
+				}
+				else if(status == -2)
+				{
+					Alert.show("There are some problems while importing data!", "Error!");
+				}
+				else if(status == -3)
+				{
+					Alert.show("There are some problems while parsing data! Check it and try again.", "Error!");
+				}
+				else if(status == -4)
+				{
+					Alert.show("There are some problems while parsing data! Check it and try again.", "Error!");
+				}
+				else
+				{
+					Alert.show("Importing data completed successfully.", "Success!");
+					dispatchEvent(new ImportEvent());
+					PopUpManager.removePopUp(this);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			protected function selectCsvButtonClicked(event:MouseEvent):void
+			{	
+				var read_file:ReadFile = new ReadFile();
+				PopUpManager.addPopUp(read_file, this, false);
+				PopUpManager.centerPopUp(read_file);
+				read_file.setFileType(ReadFile.CSV_FORMAT);
+				read_file.addEventListener(ReadFileEvent.TYPE, onReadCsvFile);
+			}
+			
+			/**
+			 * 
+			 */
+			protected function selectFastaButtonClicked(event:MouseEvent):void
+			{	
+				var read_file:ReadFile = new ReadFile();
+				PopUpManager.addPopUp(read_file, this, false);
+				PopUpManager.centerPopUp(read_file);
+				read_file.setFileType(ReadFile.FASTA_FORMAT);
+				read_file.addEventListener(ReadFileEvent.TYPE, onReadFastaFile);
+			}
+			
+			/**
+			 * 
+			 */
+			private function onReadCsvFile(event:ReadFileEvent):void
+			{
+				this.csv_structures = new Array();
+				
+				CursorManager.setBusyCursor();
+				
+				var text : String = event.getText();
+				trace("ODCZYTALEM:\n" + text);
+				
+				if(this.structures_type == 0)	// Scaffold
+					csv_structures = ReadFile.parseScaffoldCSV(text);
+				else	// Contig
+					csv_structures = ReadFile.parseContigCSV(text);
+				
+				for(var j : uint = 0; j < csv_structures.length; ++j)
+				{
+					trace(csv_structures[j]['status']);
+					var status : Boolean = csv_structures[j]['status'];
+					
+					if(status == false)
+					{
+						Alert.show("Error in CSV file! " + csv_structures[j]['message'] + " Line: " + csv_structures[j]['line'], "Error!");
+						CursorManager.removeBusyCursor();
+						PopUpManager.removePopUp(this);
+						return ;
+					}
+				}
+				
+				select_fasta_group.enabled = true;
+				select_csv_label.text = "OK";
+				select_csv_label.setStyle('color', "#66C20A");
+				
+				CursorManager.removeBusyCursor();
+			}
+			
+			/**
+			 * 
+			 */
+			private function onReadFastaFile(event:ReadFileEvent):void
+			{
+				this.fasta_structures = new Array();
+				
+				CursorManager.setBusyCursor();
+				
+				var text : String = event.getText();
+				trace("ODCZYTALEM:\n" + text);
+				
+				fasta_structures = ReadFile.parseFasta(text);
+				
+				for(var j : uint = 0; j < fasta_structures.length; ++j)
+				{
+					trace(fasta_structures[j]['id'] + " --> " + fasta_structures[j]['seq']);
+				}
+				
+				ok_button.enabled = true;
+				select_fasta_label.text = "OK";
+				select_fasta_label.setStyle('color', "#66C20A");
+				
+				CursorManager.removeBusyCursor();
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultImportData(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie ImportData podczas importowania danych!");
+				trace("Blad: " + obj);
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+	<fx:Declarations>
+		<s:RadioButtonGroup id="radiogroup1"/>
+	</fx:Declarations>
+	<s:HGroup width="410" height="29">
+		<s:FormHeading width="150" height="49" label="Typ asemblacji:"/>
+		<s:ComboBox id="assembs_combo_box" width="250" height="27" dataProvider="{assembs_array}"></s:ComboBox>
+	</s:HGroup>
+	<s:Form width="410" height="100">
+		<s:FormHeading label="Import:"/>
+		<s:RadioButton id = "struct_scaffs_radio_button" groupName="radiogroup1" name = "S" label="Scaffolds" click="radioButtonChanged(event)" selected="false"/>
+		<s:RadioButton id = "struct_conts_radio_button" groupName="radiogroup1" name = "C" label="Contigs" click="radioButtonChanged(event)" selected="false"/>
+	</s:Form>
+	<s:HGroup id="select_csv_group" width="410" height="55" enabled="false">
+		<s:Button width="200" height="50" label="Select CSV file" fontWeight="bold" click="selectCsvButtonClicked(event)"/>
+		<s:Label id="select_csv_label" width="200" height="50" textAlign="center" verticalAlign="middle" text="SELECT" fontWeight="bold" color="#E4222B"/>
+	</s:HGroup>
+	<s:HGroup id="select_fasta_group" width="410" height="54" enabled="false">
+		<s:Button width="200" height="50" label="Select FASTA file" fontWeight="bold" click="selectFastaButtonClicked(event)"/>
+		<s:Label id="select_fasta_label" width="200" height="50" textAlign="center" verticalAlign="middle" text="SELECT" fontWeight="bold" color="#E4222B"/>
+	</s:HGroup>
+	<s:HGroup width="177" height="21">
+		<s:Spacer width="240" height="12"/>
+		<s:Button id = "cancel_button" label="Cancel" click="cancelButtonClicked(event)"/>
+		<s:Button id = "ok_button" label="Ok" click="okButtonClicked(event)" enabled="false"/>
+	</s:HGroup>
+</s:TitleWindow>

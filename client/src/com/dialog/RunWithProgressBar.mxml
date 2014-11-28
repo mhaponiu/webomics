@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:TitleWindow xmlns:mx="http://www.adobe.com/2006/mxml"
+				layout="vertical"
+				verticalAlign="middle"
+				backgroundColor="white"
+				headerHeight="5">
+	
+	<mx:Script>
+		<![CDATA[
+			import com.event.ProgressResultEvent;
+			
+			import mx.controls.Alert;
+			import mx.events.SliderEvent;
+			import mx.managers.PopUpManager;
+			
+			import com.config.Config;
+			
+			import com.remote.RemoteControl;
+			
+			/**
+			 * 
+			 */
+			private var connection:NetConnection;
+			
+			private var thread_id:int;
+			
+			private var finished:Boolean;
+			
+			private var result:Object;
+			
+			private function init():void 
+			{
+				// Ustawienie poczatkowe pasku postepu
+				var c:Class = progressBar.getStyle("indeterminateSkin");
+				progressBar.setStyle("barSkin", c);
+				progressBar.setProgress(0, 100);
+				progressBar.label = "Initializing... 0%";
+				
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+				
+				this.finished = false;
+			}
+			
+			public function run(thread_id:int = -1):void
+			{
+				if(thread_id != -1)
+					this.thread_id = thread_id;
+				trace("\t\tWolam remote.get dla " + this.thread_id);
+				
+				connection.call("remote.get", new Responder(onGetProgress, onFaultGetProgress), this.thread_id);
+			}
+			
+			/**
+			 * 
+			 */
+			private function onGetProgress(obj:Object):void
+			{
+				var percent:int = int(obj[0]);
+				var comment:String = String(obj[1]);
+				var result:Object = Object(obj[2]);
+				
+				trace("Dostalem procenty:" + percent);
+				
+				if(comment.length == 0)
+					comment = "Loading...";
+				
+				progressBar.setProgress(percent, 100);
+				progressBar.label = comment + " " + String(percent) + "%";
+				
+				if(percent == 100)
+				{
+					this.result = result;
+					this.finished = true;
+					dispatchEvent(new ProgressResultEvent(result));
+					PopUpManager.removePopUp(this);
+				}
+				else
+				{
+					setTimeout(this.run, 1000 * Config.PROGRESS_CALL_TIME);
+					//this.run(this.thread_id);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultGetProgress(obj:Object):void
+			{
+				Alert.show("Blad w dzialaniu aplikacji w oknie RunWithProgressBar!");
+				trace("Blad: " + obj);
+				PopUpManager.removePopUp(this);
+			}
+		]]>
+	</mx:Script>
+
+	<mx:ProgressBar id="progressBar"
+					mode="manual"
+					labelPlacement="center"
+					height="50"
+					width="600"
+					creationComplete="init();" />
+	
+</mx:TitleWindow>

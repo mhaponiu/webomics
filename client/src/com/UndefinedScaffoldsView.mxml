@@ -1,0 +1,452 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx" xmlns:s="library://ns.adobe.com/flex/spark" xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   title="" width="1200" height="600" close="onCloseEvent()">
+	<fx:Script> <![CDATA[
+		import com.config.Config;
+		import com.style.HTMLToolTip;
+		import com.view.ChromosomeCanvas;
+		import com.dialog.UndefinedScaffoldInformations;
+		import com.event.ScaffoldEvent;
+		
+		import com.remote.RemoteControl;
+		
+		import mx.collections.ArrayCollection;
+		import mx.containers.Box;
+		import mx.containers.Canvas;
+		import mx.controls.Alert;
+		import mx.controls.Button;
+		import mx.controls.Label;
+		import mx.controls.sliderClasses.Slider;
+		import mx.events.ItemClickEvent;
+		import mx.events.SliderEvent;
+		import mx.formatters.NumberBaseRoundType;
+		import mx.managers.CursorManager;
+		import mx.managers.PopUpManager;
+		import mx.managers.ToolTipManager;
+		import mx.rpc.events.FaultEvent;
+		import mx.utils.ArrayUtil;
+		
+		// ----------------------------------------------- ZMIENNE APLIKACJI -------------------------------------------
+		
+		/**
+		 * 
+		*/
+		private var scaffolds_canvas:Canvas;
+		
+		/**
+		 * 
+		 */
+		private var factor:Number = new Number();
+		
+		/**
+		 * 
+		 */
+		private var interval:Number = new Number();
+		
+		/**
+		 * 
+		 */
+		private static const POSITIONS_RULER_PADDING_TOP:Number = 1;
+		
+		/**
+		 * 
+		 */
+		private static const POSITIONS_PADDING_LEFT:Number = 50.0;
+		
+		/**
+		 * 
+		 */
+		private var shown_types:Array;
+		
+		/**
+		 * 
+		 */
+		private var assemb_types:ArrayCollection;
+		
+		/**
+		 * 
+		*/
+		private var position_Y:Number;
+		
+		/**
+		 * 
+		 */
+		private var start_id:Number;
+		
+		/**
+		 * 
+		*/
+		private var connection:NetConnection;
+
+		
+		// -------------------------------------------------- KONSTRUKTOR ----------------------------------------------
+		
+		/**
+		 * 
+		 */
+		public function init(width:Number, height:Number):void
+		{
+			ToolTipManager.toolTipClass = HTMLToolTip;
+			
+			trace("Rozpoczynam budowe okna niezdefiniowanych scaffoldow...");
+			// Rozpoczecie ladowania okna
+			this.enabled = false;
+			CursorManager.setBusyCursor();
+			
+			shown_types = new Array();
+			
+			// Nawiazanie polaczenia z serwerem aplikacji
+			connection = new NetConnection();
+			connection.connect(RemoteControl.GATEWAY);
+
+			// Wlasciwosci okna
+			this.x = 0;
+			this.y = 0;
+			this.title = "Undefined scaffolds";
+			this.width = width;
+			this.height = height;
+			resetPositionY();
+			
+			// Odczytanie wszystkich typów asemblacji
+			connection.call("chromosome.getAssembs", new Responder(onGetAssembs, onFaultGetAssembs));
+			
+			scaffolds_panel.maxHeight = this.height - control_bar.height - 50.0;
+			trace("Maksymalna wysokosc powierzchni rysowania: " + scaffolds_panel.maxHeight);
+						
+			// Zakonczenie ladowania okna
+			this.enabled = true;
+			CursorManager.removeBusyCursor();
+		}
+		
+		// ---------------------------------------------- FUNKCJE POMOCNICZE -------------------------------------------
+		
+		/**
+		 * 
+		 */
+		private function onGetAssembs(data:Object):void
+		{
+			assemb_types = new ArrayCollection(ArrayUtil.toArray(data));
+			
+			for(var i:int = 0; i < assemb_types.length; ++i)
+			{
+				var button:Button = new Button();
+				button.toggle = true;
+				button.label = assemb_types[i]["name"];
+				button.id = "assemb_" + String(assemb_types[i]["id"]);
+				button.addEventListener(Event.CHANGE, onClickTypeButton);
+				button.selected = true;
+				
+				// Dodajemy do domyslnego typu asemblacji
+				shown_types.push(assemb_types[i]["id"]);
+				
+				ass_buttons_group.addElement(button);
+			}
+			
+			// Ustawienie granicznych wartosci stepperow - wykonywanie sekwencyjne
+			connection.call("scaffold.undefined.getMinID", new Responder(onGetMinUdefScaffID, onFault), shown_types);		
+		}
+		
+		/**
+		 * 
+		 */
+		private function onFaultGetAssembs(obj:Object):void
+		{
+			CursorManager.removeBusyCursor();
+			Alert.show("Blad w dzialaniu aplikacji w oknie ChromosomeView podczas odbierania typow asemblacji!");
+			trace("Blad: " + obj);
+		}
+		
+		/**
+		 * 
+		 * 
+		*/
+		private function drawUndefinedScaffolds():void
+		{
+			CursorManager.setBusyCursor();
+			// Pobranie wartosci najdluzszego niezdefiniowanego scaffolda
+			trace("Pobieram wartosc dlugosci najdluzszego niezdefiniowanego scaffolda (" + scaffold_from.value + ", " + scaffold_to.value + ")");
+			connection.call("scaffold.undefined.getMaxLength", new Responder(onGetMaxUdefScaffLen, onFault), shown_types, scaffold_from.value, scaffold_to.value);
+		}
+		
+		private function drawUdefScaff(scaffold:Object, draw_label:Boolean):void
+		{
+			trace("Rysuje scaff (L: " + draw_label + "): " + scaffold.scaff_id + " na pozycji: (" + scaffold.start_bp + ", " + this.position_Y + " --> end: " + scaffold.end_bp + ") ==> Dlugosc fiz: " + (calculateUnitToDraw(scaffold.end_bp) - calculateUnitToDraw(scaffold.start_bp)));
+			var scaff:Box = new Box();
+			scaff.graphics.beginFill(StyleManager.getColorName("#cc99ff"), 1.0);
+			// Narysowanie obiektu
+			scaff.graphics.moveTo(0, 10);
+			scaff.graphics.drawRoundRect(calculateUnitToDraw(scaffold.start_bp) + POSITIONS_PADDING_LEFT, this.position_Y, calculateUnitToDraw(scaffold.end_bp) - calculateUnitToDraw(scaffold.start_bp) + 1, 15, 3, 3);
+			scaff.graphics.endFill();
+			scaff.useHandCursor = true;
+			scaff.buttonMode = true;
+			scaff.mouseChildren = false;
+			scaff.addEventListener(MouseEvent.CLICK, ScaffoldEvent.informations(scaffoldClickEventHandler, [scaffold]));
+			var tooltip:String = "<font color='#076baa' size='+4'><b>ID: " + String(scaffold.scaff_id) + "</b></font><br>";
+			tooltip += "<font color='#076baa' size='+2'>Length: " + String(scaffold.length_all_bp) + "</font><br>";
+			tooltip += "<font color='#076baa' size='+2'>Assembling: " + String(scaffold.assemb_type) + "</font><br>";
+			tooltip += "<font color='#076baa'>Click to see more informations...</font>";
+			scaff.toolTip = tooltip;
+			
+			this.scaffolds_canvas.addChild(scaff);
+			//scaffolds_panel.addChild(scaff);
+			
+			if(draw_label == true)
+			{
+				var label:Label = new Label();
+				label.text = String(scaffold.scaff_id);
+				label.x = calculateUnitToDraw(scaffold.start_bp);
+				label.y = this.position_Y;
+				this.scaffolds_canvas.addChild(label);
+			}
+		}
+		
+		/**
+		 * 
+		 * @param from:
+		 * @param length:
+		 */
+		private function drawVerticalLines(from:Number, length:Number):void
+		{
+			CursorManager.setBusyCursor();
+			var lines:Box = new Box();
+			var i:int;
+			for (i = 0; i < length; i++)
+			{
+				if (i%5 == 0)
+				{
+					var label:Label = new Label();
+					label.text = String((from + i*100).toFixed(2));
+					label.x = i * interval;
+					label.y = POSITIONS_RULER_PADDING_TOP;
+					label.setStyle("fontSize", 10);
+					this.scaffolds_canvas.addChild(label);
+					
+					lines.graphics.lineStyle(1, 0x858585);
+				}
+				else
+				{
+					lines.graphics.lineStyle(1, 0xE0E0E0);
+				}
+				
+				lines.graphics.moveTo(i * interval, 0);
+				lines.graphics.lineTo(i * interval, scaffolds_panel.height - 50);
+			}
+			this.scaffolds_canvas.addChild(lines);
+			CursorManager.removeBusyCursor();
+		}
+		
+		/**
+		 * 
+		 * @param unit:
+		 * @return:
+		 */
+		private function calculateUnitToDraw(unit:Number):Number
+		{	
+			return unit * factor;		
+		}
+		
+		public function resetPositionY():void
+		{
+			this.position_Y = 20.0;
+		}
+		
+		// --------------------------------------------------- RESPONDERY ----------------------------------------------
+
+		/**
+		 * 
+		 * 
+		 */
+		private function onGetMaxUdefScaffID(data:Object):void
+		{
+			var max_id:Number = new Number(data);
+			trace("Zmieniam MAX ID na: " + max_id);
+			scaffold_from.maximum = max_id;
+			scaffold_to.maximum = max_id;
+			
+			scaffold_from.value = this.start_id;
+			scaffold_to.value = this.start_id + 1;
+			trace("Zmienilem value na: " + scaffold_from.value + " oraz " + scaffold_to.value);
+			
+			onRefresh();
+		}
+		
+		/**
+		 * 
+		 * 
+		 */
+		private function onGetMinUdefScaffID(data:Object):void
+		{
+			var min_id:Number = new Number(data);
+			trace("Zmieniam MIN ID na: " + min_id + "...");
+			scaffold_from.minimum = min_id;
+			scaffold_to.minimum = min_id;
+			
+			this.start_id = min_id;
+			
+			connection.call("scaffold.undefined.getMaxID", new Responder(onGetMaxUdefScaffID, onFault), shown_types);
+		}
+		
+		/**
+		 * 
+		 * 
+		*/
+		private function onGetMaxUdefScaffLen(data:Object):void
+		{
+			var length:Number = new Number(data);
+			trace("Wartosc najdluzszego niezdefiniowanego scaffolda: " + length);
+			this.factor = (this.width - POSITIONS_PADDING_LEFT) / length;
+			this.interval = (this.width * 100 - POSITIONS_PADDING_LEFT) / length;
+			trace("Przelicznik: " + this.factor);
+			// Narysowanie linii pionowych
+			//drawVerticalLines(0, length);
+			trace("Pobieram scaffoldy (" + shown_types + ") od " + scaffold_from.value + " do " + scaffold_to.value + "...");
+			// Pobranie wszystkich niezdefiniowanych scaffoldow
+			connection.call("scaffold.undefined.getScaffolds", new Responder(onGetUndefScaffs, onFault), shown_types, scaffold_from.value, scaffold_to.value);
+		}
+		
+		/**
+		 * 
+		 * 
+		*/
+		private function onGetUndefScaffs(data:Object):void
+		{
+			var scaffolds:Array = ArrayUtil.toArray(data);
+			// Rysowanie pojedynczych scaffoldow
+			for(var i:int; i < scaffolds.length; i++)
+			{
+				if(i > 0 && scaffolds[i - 1].scaff_id == scaffolds[i].scaff_id)
+				{
+					drawUdefScaff(scaffolds[i], false);
+				}
+				else
+				{
+					this.position_Y += 20.0;
+					drawUdefScaff(scaffolds[i], true);
+				}
+			}
+			CursorManager.removeBusyCursor();
+		}
+		
+		/**
+		 * 
+		 */
+		private function onFault(obj:Object):void
+		{
+			Alert.show("Blad w dzialaniu aplikacji!");
+			trace("Blad: " + obj);
+		}
+		
+		// ---------------------------------------------------- LISTENERY ----------------------------------------------
+		
+		/**
+		 * 
+		 */
+		private function onRefresh():void
+		{
+			if(scaffolds_canvas)
+			{
+				scaffolds_panel.removeChild(scaffolds_canvas);
+			}
+			resetPositionY();
+			scaffolds_canvas = new Canvas();
+			scaffolds_canvas.width = scaffolds_panel.width - 20;
+			scaffolds_canvas.height = scaffolds_panel.height - 20;
+			scaffolds_panel.addChild(scaffolds_canvas);
+			
+			// Narysowanie niezdefiniowanych scaffoldow
+			drawUndefinedScaffolds();	
+		}
+		
+		/**
+		 * 
+		 * @param event:
+		 * @param scaffold:
+		 */
+		private function scaffoldClickEventHandler(event:MouseEvent, scaffold:Object):void
+		{
+			var scaffold_informations:UndefinedScaffoldInformations = new UndefinedScaffoldInformations();
+			PopUpManager.addPopUp(scaffold_informations, this, false);
+			PopUpManager.centerPopUp(scaffold_informations);
+			scaffold_informations.init(scaffold);
+		}
+		
+		/**
+		 * 
+		 */
+		private function onClickTypeButton(evt:Event):void
+		{
+			var button:Button = evt.currentTarget as Button;
+			var btn_str_id:String = button.id;
+			var btn_id:uint = uint(btn_str_id.substring(btn_str_id.lastIndexOf("_") + 1));
+			trace("\t\tID wcisnietego przycisku:" + String(btn_id));			
+			
+			if(button.selected == true)
+				shown_types.push(btn_id);
+			else
+				shown_types.splice(shown_types.indexOf(btn_id), 1);
+			
+			// Odswierzamy widok
+			onRefresh();
+		}
+		
+		/**
+		 * 
+		 */
+		private function changeScaffoldsFrom():void 
+		{
+			
+			// Odswierzamy widok
+			onRefresh();
+		}
+		
+		/**
+		 * 
+		 */
+		private function changeScaffoldsTo():void 
+		{
+			
+			// Odswierzamy widok
+			onRefresh();
+		}
+		
+		/**
+		 * 
+		 */
+		private function onCloseEvent():void
+		{
+			PopUpManager.removePopUp(this);
+		}
+
+	]]> </fx:Script>
+	
+	<fx:Style>       
+		.refreshStyle
+		{
+			color: #333399;
+			fontSize: 10;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<mx:VBox width="100%" height="100%">
+		<mx:ApplicationControlBar id="control_bar" width="100%">
+			<s:VGroup  width="100%">
+				<s:HGroup id="ass_buttons_group" width="100%">
+					<mx:Label text="Type: "/>
+				</s:HGroup>
+				<s:HGroup  width="100%">
+					<mx:Label text="Show scaffolds from:"/>
+					<mx:NumericStepper id="scaffold_from" width="120" change="changeScaffoldsFrom();"
+									   stepSize="1.00"/>
+					<mx:Label text="to:"/>
+					<mx:NumericStepper id="scaffold_to" width="120" change="changeScaffoldsTo();"
+									   stepSize="1.00"/>
+				</s:HGroup>
+			</s:VGroup>
+		</mx:ApplicationControlBar>
+		
+		<mx:Panel id="scaffolds_panel" x="0" y="100" width="100%" height="100%" color="#000066" useHandCursor="true">
+			
+		</mx:Panel>
+	</mx:VBox>
+</s:TitleWindow>

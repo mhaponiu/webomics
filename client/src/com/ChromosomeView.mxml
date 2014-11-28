@@ -1,0 +1,966 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx" xmlns:s="library://ns.adobe.com/flex/spark" xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   title="" width="100%" height="100%" close="onCloseEvent()" xmlns:style="com.style.*">
+	<fx:Script> <![CDATA[
+		import com.config.Config;
+		import com.dialog.ScaffoldInformations;
+		import com.event.ShiftEvent;
+		import com.event.ZoomEvent;
+		import com.remote.RemoteControl;
+		import com.view.ChromosomeCanvas;
+		import com.view.ScaffoldCanvas;
+		
+		import mx.collections.ArrayCollection;
+		import mx.controls.Alert;
+		import mx.controls.Button;
+		import mx.controls.Label;
+		import mx.controls.sliderClasses.Slider;
+		import mx.events.ItemClickEvent;
+		import mx.events.SliderEvent;
+		import mx.formatters.NumberBaseRoundType;
+		import mx.managers.CursorManager;
+		import mx.managers.PopUpManager;
+		import mx.rpc.events.FaultEvent;
+		import mx.utils.ArrayUtil;
+		
+		// ----------------------------------------------- ZMIENNE APLIKACJI -------------------------------------------
+		
+		/**
+		 * 
+		*/
+		private var connection:NetConnection;
+		
+		/**
+		 * 
+		 */
+		private var shown_types:Array;
+		
+		/**
+		 * 
+		 */
+		private var assemb_types:ArrayCollection;
+		
+		/**
+		 * 
+		 */
+		private var chromosome_canvas:ChromosomeCanvas;
+		
+		/**
+		 * 
+		 */
+		private var scaffold_canvas:ScaffoldCanvas;
+		
+		/**
+		 * 
+		 */
+		private var init_scaff_id:String;
+		
+		/**
+		 * 
+		 */
+		private var init_scaff_poss:Number = 0.0;
+		
+		/**
+		 * 
+		 */
+		private var init_scaff_start_index:Number = 0.0;
+		
+		/**
+		 * 
+		 */
+		private var init_scaff_end_index:Number = 0.0;
+		
+		/**
+		 * 
+		 */
+		private var current_scaffold:Object;
+		
+		/**
+		 * 
+		 */
+		private var chromosome_id:int;
+		
+		/**
+		 * 
+		 */
+		private var organism_id:int = -1;
+		
+		/**
+		 * 
+		 */
+		private var init_scaff_draw:Boolean = false;
+		
+		// -------------------------------------------------- KONSTRUKTOR ----------------------------------------------
+		
+		/**
+		 * 
+		 */
+		public function init(title:String, width:Number, height:Number, chromosome_obj:Object, organism_id:int, chromosome_from_value:Number = 0.0):void
+		{
+			trace("Rozpoczynam budowe okna chromosomu...");
+			// Rozpoczecie ladowania okna
+			this.enabled = false;
+			shown_types = new Array();
+			
+			this.organism_id = organism_id;
+			
+			this.chromosome_id = chromosome_obj['id'];
+			
+			// Nawiazanie polaczenia z serwerem aplikacji
+			connection = new NetConnection();
+			connection.connect(RemoteControl.GATEWAY);
+			
+			// Zbudownaie drzew przedzialowych
+			trace("Buduje drzewo przedzialowe dla danego chromosomu...");
+			connection.call("scaffold.buildTree", new Responder(builtTree, onFaultBuiltTree), chromosome_obj['id']);
+			
+			// Wlasciwosci okna
+			this.x = 0;
+			this.y = 0;
+			this.title = title + " properties";
+			this.width = width;
+			this.height = height;
+
+			chromosome_panel.title = title + " view";
+			connection.call("scaffold.count", new Responder(onGetScaffoldsCount, onFaultGetScaffoldsCount), chromosome_obj['id']);
+			
+			// Odczytanie dlugosci
+			var length:Number = chromosome_obj['length'];
+			
+			// Odczytanie wszystkich typów asemblacji
+			connection.call("chromosome.getAssembsFromOrganism", new Responder(onGetAssembs, onFaultGetAssembs), this.organism_id);
+			
+			// Wartosci domyslne
+			var range_value:Number = 1.0;
+			if(length > 4)
+				range_value = 0.10 * length;
+			
+			// Wlasciwosci slidera chromosomu (gornego)
+			chromosome_slider.maximum = length;
+			chromosome_slider.labels = [0.0, length.toFixed(1)];
+			chromosome_slider.setThumbValueAt(0, chromosome_from_value);
+			chromosome_slider.setThumbValueAt(1, chromosome_from_value + range_value);
+			
+			// Wlasciwosci pol tekstowych ustawien chromosomu (gornego)
+			chromosome_from.maximum = length;
+			chromosome_from.value = chromosome_from_value;
+			
+			chromosome_range.maximum = length;
+			chromosome_range.value = range_value;
+			
+			chromosome_to.maximum = length - chromosome_range.value;
+			chromosome_to.value = chromosome_from_value + range_value;
+			
+			// Automatyczne uwidocznienie scaffoldow i contigow
+			scaffolds_checkbox.selected = true;
+			contigs_checkbox.selected = true;
+			
+			// Uaktualnienie widoku
+			//onRefresh();
+			
+			// Informacje na pasku statusu
+			//status.info("Application status: OK");
+			
+			// Jezeli scaffold poczatkowy ma byc wyswietlony
+			if(init_scaff_draw == true)
+			{
+				// Wyswietlenie struktur na danym scaffoldzie
+				connection.call("scaffold.getScaffold", new Responder(onGetScaffold, onFaultOnGetScaffold), this.init_scaff_id);
+				
+				// Otworzenie okna ze szczegolami scaffoldu
+				var scaffold_informations:ScaffoldInformations = new ScaffoldInformations();
+				PopUpManager.addPopUp(scaffold_informations, this, false);
+				PopUpManager.centerPopUp(scaffold_informations);
+				scaffold_informations.initByID(this.init_scaff_id);
+			}
+			
+			// Zakonczenie ladowania okna
+			this.enabled = true;
+		}
+		
+		/**
+		 * 
+		 */
+		public function initWithScaff(chr_id:int, scaff_id:String, start_index:Number, end_index:Number):void
+		{
+			this.chromosome_id = chr_id;
+			this.init_scaff_id = scaff_id;
+			this.init_scaff_start_index = start_index;
+			this.init_scaff_end_index = end_index;
+			
+			// Nawiazanie polaczenia z serwerem aplikacji
+			connection = new NetConnection();
+			connection.connect(RemoteControl.GATEWAY);
+			
+			connection.call("scaffold.getScaffoldPosition", new Responder(onGetScaffoldPos, onFaultOnGetScaffoldPos), this.init_scaff_id);
+		}
+		
+		// --------------------------------------------------- RESPONDERY ----------------------------------------------
+
+		/**
+		 * 
+		 */
+		private function onInitWithScaff(chromosome_obj:Object):void
+		{
+			this.init_scaff_draw = true;
+			this.init("Chromosome " + String(chromosome_obj['id']), 1366, 677, chromosome_obj, chromosome_obj['organism_id'], this.init_scaff_poss - 1);
+			
+			
+			//TODO: TUTAJ MOZE BYC WYSCIG! INIT JUZ SIE DZIEJE A ZA CHWILE CHCE OD RAZU GET SCAFFOLD
+			
+			/*
+			PRZENIESIONE DO INITA ZEBY UNIKNAC WYSCIGU
+			// Wyswietlenie struktur na danym scaffoldzie
+			connection.call("scaffold.getScaffold", new Responder(onGetScaffold, onFaultOnGetScaffold), this.init_scaff_id);
+			
+			// Otworzenie okna ze szczegolami scaffoldu
+			var scaffold_informations:ScaffoldInformations = new ScaffoldInformations();
+			PopUpManager.addPopUp(scaffold_informations, this, false);
+			PopUpManager.centerPopUp(scaffold_informations);
+			scaffold_informations.initByID(this.init_scaff_id);
+			*/
+		}
+		
+		/**
+		 * 
+		 */
+		private function onFaultOnInitWithScaffs(obj:Object):void
+		{
+			CursorManager.removeBusyCursor();
+			Alert.show("Blad w dzialaniu aplikacji w oknie ChromosomeView odbierania informacji o chromosomie!");
+			trace("Blad: " + obj);
+		}
+		
+		/**
+		 * 
+		 */
+		private function onGetAssembs(data:Object):void
+		{
+			assemb_types = new ArrayCollection(ArrayUtil.toArray(data));
+			
+			for(var i:int = 0; i < assemb_types.length; ++i)
+			{
+				var button:Button = new Button();
+				button.toggle = true;
+				button.label = assemb_types[i]["name"];
+				button.id = "assemb_" + String(assemb_types[i]["id"]);
+				button.addEventListener(Event.CHANGE, onClickTypeButton);
+				button.selected = true;
+				
+				// Dodajemy do domyslnego typu asemblacji
+				shown_types.push(assemb_types[i]["id"]);
+				
+				ass_buttons_group.addElement(button);
+			}
+			
+			// Uaktualnienie widoku
+			onRefresh();
+		}
+		
+		/**
+		 * 
+		 */
+		private function onFaultGetAssembs(obj:Object):void
+		{
+			CursorManager.removeBusyCursor();
+			Alert.show("Blad w dzialaniu aplikacji w oknie ChromosomeView podczas odbierania typow asemblacji!");
+			trace("Blad: " + obj);
+		}
+		
+		/**
+		 * 
+		 */
+		private function onGetScaffoldsCount(data:Object):void
+		{
+			chromosome_panel.title = chromosome_panel.title + " (" + int(data) + " scaffolds)";
+		}
+		
+		/**
+		 * 
+		 */
+		private function onFaultGetScaffoldsCount(obj:Object):void
+		{
+			CursorManager.removeBusyCursor();
+			Alert.show("Blad w dzialaniu aplikacji w oknie ChromosomeView podczas pobierania ilosci scaffoldow!");
+			trace("Blad: " + obj);
+		}
+		
+		/**
+		 * 
+		 */
+		private function onGetScaffoldPos(scaff_start:Number):void
+		{
+			trace("Scaff:" + this.init_scaff_id + " --> " + scaff_start);
+			this.init_scaff_poss = scaff_start;
+			connection.call("chromosome.getChromosomeByID", new Responder(onInitWithScaff, onFaultOnInitWithScaffs), this.chromosome_id);
+			
+			// Uaktualnienie widoku
+			//onRefresh();
+		}
+		
+		/**
+		 * 
+		 */
+		private function onFaultOnGetScaffoldPos(obj:Object):void
+		{
+			CursorManager.removeBusyCursor();
+			Alert.show("Blad w dzialaniu aplikacji w oknie ChromosomeView odbierania informacji o scaffoldzie - start position!");
+			trace("Blad: " + obj);
+		}
+		
+		/**
+		 * 
+		 */
+		private function onGetScaffold(scaff:Object):void
+		{
+			this.onScaffoldClicked(scaff, this.init_scaff_start_index, this.init_scaff_end_index);
+		}
+		
+		/**
+		 * 
+		 */
+		private function onFaultOnGetScaffold(obj:Object):void
+		{
+			CursorManager.removeBusyCursor();
+			Alert.show("Blad w dzialaniu aplikacji w oknie ChromosomeView odbierania informacji o scaffoldzie!");
+			trace("Blad: " + obj);
+		}
+		
+		/**
+		 * 
+		 */
+		private function builtTree(data:Object):void
+		{
+
+		}
+		
+		/**
+		 * 
+		 */
+		private function showScaffolds(data:Object):void
+		{
+			chromosome_canvas.drawScaffolds(ArrayUtil.toArray(data))
+			CursorManager.removeBusyCursor();
+		}
+		
+		/**
+		 * 
+		 */
+		private function onFaultBuiltTree(obj:Object):void
+		{
+			CursorManager.removeBusyCursor();
+			Alert.show("Blad w dzialaniu aplikacji w oknie ChromosomeView podczas budowania drzewa przedzialowego!");
+			trace("Blad: " + obj);
+		}
+		
+		/**
+		 * 
+		 */
+		private function onFaultGetScaffsFromTree(obj:Object):void
+		{
+			Alert.show("Blad w dzialaniu aplikacji w oknie ChromosomeView podczas pobierania scaffoldow z drzewa!");
+			trace("Blad: " + obj);
+		}
+		
+		// ---------------------------------------------------- LISTENERY ----------------------------------------------
+		
+		/**
+		 * 
+		 */
+		private function onClickTypeButton(evt:Event):void
+		{
+			var button:Button = evt.currentTarget as Button;
+			var btn_str_id:String = button.id;
+			var btn_id:uint = uint(btn_str_id.substring(btn_str_id.lastIndexOf("_") + 1));
+			trace("\t\tID wcisnietego przycisku:" + String(btn_id));			
+			
+			if(button.selected == true)
+				shown_types.push(btn_id);
+			else
+				shown_types.splice(shown_types.indexOf(btn_id), 1);
+			
+			// Odswierzamy widok
+			onRefresh();
+		}
+		
+		/**
+		 * 
+		 */
+		private function chromosomeSliderChange(event:SliderEvent):void 
+		{
+			// Zmiana wartosci sliderow
+			var ct:Slider = Slider(event.currentTarget);
+			if(event.thumbIndex == 0)				// Dolny
+			{
+				ct.values[1] = ct.values[0] + chromosome_range.value;
+				if(ct.values[1] > chromosome_slider.maximum)
+				{
+					ct.values[1] = chromosome_slider.maximum;
+					ct.values[0] = ct.values[1] - chromosome_range.value;
+				}
+			}
+			else									// Gorny
+			{
+				ct.values[0] = ct.values[1] - chromosome_range.value;
+				if(ct.values[0] < 0)
+				{
+					ct.values[0] = 0;
+					ct.values[1] = ct.values[0] + chromosome_range.value;
+				}
+			}
+			
+			// Zmiana wartosci pol tekstowych FROM oraz TO
+			chromosome_from.value = ct.values[0];
+			chromosome_to.value = ct.values[1];
+			
+			// Odswierzamy widok
+			onRefresh();
+		}
+		
+		/**
+		 * 
+		 */
+		private function changeChromosomeRange():void 
+		{
+			// Uaktualnienie slidera drugiego
+			chromosome_slider.setThumbValueAt(1, chromosome_slider.values[0] + chromosome_range.value);
+		
+			// Zmiana wartosci pola tekstowych TO
+			chromosome_to.value = chromosome_from.value + chromosome_range.value;
+			
+			trace("\t\t\tZmieniam wartosc pola `To` o " + chromosome_range.value + " na " + chromosome_to.value);
+			
+			// Odswierzamy widok
+			onRefresh();
+		}
+		
+		/**
+		 * 
+		 */
+		private function updateChromosomeSliderStart():void 
+		{
+			// Uaktualnienie slidera chromosomu
+			chromosome_slider.setThumbValueAt(0, chromosome_from.value);
+			chromosome_slider.setThumbValueAt(1, chromosome_from.value + chromosome_range.value);
+			
+			// Zmiana wartosci pola tekstowego TO
+			chromosome_to.value = chromosome_from.value + chromosome_range.value;
+			
+			// Odswierzamy widok
+			onRefresh();
+		}
+		
+		/**
+		 * 
+		 */
+		private function updateChromosomeSliderStop():void 
+		{
+			// Uaktualnienie slidera chromosomu
+			chromosome_slider.setThumbValueAt(0, chromosome_to.value);
+			chromosome_slider.setThumbValueAt(1, chromosome_to.value - chromosome_range.value);
+			
+			// Zmiana wartosci pola tekstowego FROM
+			chromosome_from.value = chromosome_to.value - chromosome_range.value;
+			
+			// Odswierzamy widok
+			onRefresh();
+		}
+		
+		/**
+		 * 
+		 */
+		private function scaffoldSliderChange(event:SliderEvent):void 
+		{
+			// Zmiana wartosci sliderow
+			var ct:Slider = Slider(event.currentTarget);
+			if(event.thumbIndex == 0)				// Dolny
+			{
+				ct.values[1] = ct.values[0] + scaffold_range.value;
+				if(ct.values[1] > scaffold_slider.maximum)
+				{
+					ct.values[1] = scaffold_slider.maximum;
+					ct.values[0] = ct.values[1] - scaffold_range.value;
+				}
+			}
+			else									// Gorny
+			{
+				ct.values[0] = ct.values[1] - scaffold_range.value;
+				if(ct.values[0] < 0)
+				{
+					ct.values[0] = 0;
+					ct.values[1] = ct.values[0] + scaffold_range.value;
+				}
+			}
+			
+			// Zmiana wartosci pol tekstowych FROM oraz TO
+			scaffold_from.value = ct.values[0];
+			scaffold_to.value = ct.values[1];
+			
+			// Odswierzamy widok
+			onRefreshScaffold();
+		}
+		
+		/**
+		 * 
+		 */
+		private function changeScaffoldRange():void 
+		{
+			// Uaktualnienie slidera drugiego
+			scaffold_slider.setThumbValueAt(1, chromosome_slider.values[0] + scaffold_range.value);
+			
+			// Zmiana wartosci pola tekstowych TO
+			scaffold_to.value = scaffold_from.value + scaffold_range.value;
+			
+			trace("\t\t\tZmieniam wartosc pola `To` o " + scaffold_range.value + " na " + scaffold_to.value);
+			
+			// Odswierzamy widok scaffoldu
+			onRefreshScaffold();
+		}
+		
+		/**
+		 * 
+		 */
+		private function updateScaffoldSliderStart():void 
+		{
+			// Uaktualnienie slidera scaffoldu
+			scaffold_slider.setThumbValueAt(0, scaffold_from.value);
+			scaffold_slider.setThumbValueAt(1, scaffold_from.value + scaffold_range.value);
+			
+			// Zmiana wartosci pola tekstowego TO
+			scaffold_to.value = scaffold_from.value + scaffold_range.value;
+			
+			// Odswierzamy widok
+			onRefreshScaffold();
+		}
+		
+		/**
+		 * 
+		 */
+		private function updateScaffoldSliderStop():void 
+		{
+			// Uaktualnienie slidera scaffoldu
+			scaffold_slider.setThumbValueAt(0, scaffold_to.value);
+			scaffold_slider.setThumbValueAt(1, scaffold_to.value - scaffold_range.value);
+			
+			// Zmiana wartosci pola tekstowego FROM
+			scaffold_from.value = scaffold_to.value - scaffold_range.value;
+			
+			// Odswierzamy widok
+			onRefreshScaffold();
+		}
+		
+		/**
+		 * 
+		 */
+		private function onRefresh():void
+		{
+			CursorManager.setBusyCursor();
+			trace("Ass_type: " + shown_types);
+			if(shown_types != null)
+			{
+				if(scaffolds_checkbox.selected == true)
+				{
+					if(chromosome_canvas)
+						chromosome_view.removeChild(chromosome_canvas);
+					
+					// Utworzenie obiektu, na ktorym rysowane sa scaffoldy
+					chromosome_canvas = new ChromosomeCanvas(width - scaff_properties.width, chromosome_view.height, chromosome_from.value, chromosome_to.value, this.organism_id, false);
+					
+					// Pobranie scaffoldow z serwera aplikacji
+					connection.call("scaffold.getFromTree", new Responder(showScaffolds, onFaultGetScaffsFromTree), shown_types, chromosome_from.value, chromosome_to.value);
+					
+					chromosome_view.addChild(chromosome_canvas);
+				}
+				else
+				{
+					if(chromosome_canvas)
+					{
+						chromosome_view.removeChild(chromosome_canvas);
+						chromosome_canvas = null;
+						CursorManager.removeBusyCursor();
+					}
+				}
+			}
+			
+			
+		}
+		
+		/**
+		 * 
+		 */
+		private function onRefreshScaffold():void
+		{
+			if(contigs_checkbox.selected == true)
+			{
+				this.showScaffoldStructures(this.current_scaffold);	
+			}
+			else
+			{
+				if(scaffold_canvas)
+					scaff_view.removeChild(scaffold_canvas);
+				scaffold_canvas = null;
+			}
+			
+			if(markers_checkbox.selected == true)
+			{
+				
+			}
+			else
+			{
+				
+			}
+		}
+		
+		/**
+		 * 
+		 */
+		private function onCloseEvent():void
+		{
+			PopUpManager.removePopUp(this);
+		}
+		
+		public function onScaffoldClicked(scaffold:Object, start_bp:Number = 0.0, end_bp:Number = 0.0):void
+		{
+			this.current_scaffold = scaffold;
+			// Ustawiamy wartosci wszystkich sliderow
+			
+			var margin:Number = 10.0;
+			
+			// Wartosci domyslne
+			var range_value:Number = (int)((scaffold.length_bp)/20);
+			var start_view:Number = 0.0;
+			var end_view:Number = range_value;
+			var start_selected:Number = start_bp;
+			var end_selected:Number = end_bp;
+			
+			if(end_bp != 0.0)	// Chcemy wyswietlic wynik wyszukiwania
+			{
+				// Poczatek wyswietlania
+				if(start_bp > margin)
+					start_view = start_bp - margin;
+				else
+					start_view = 0.0;
+				
+				// Koniec wyswietlania
+				if(end_bp < scaffold.length_bp.toFixed(1) - margin)
+					end_view = end_bp + margin;
+				else
+					end_view = scaffold.length_bp.toFixed(1)
+				
+				// Wielkosc przedzialu
+				range_value = end_view - start_view;
+						
+			}
+			
+			// Wlasciwosci slidera scaffoldu
+			scaffold_slider.maximum = scaffold.length_bp;
+			scaffold_slider.labels = [0.0, scaffold.length_bp.toFixed(1)];
+			scaffold_slider.setThumbValueAt(0, start_view);
+			scaffold_slider.setThumbValueAt(1, start_view + range_value);
+			scaffold_slider.tickInterval = scaffold.length_bp / 10;
+			
+			// Wlasciwosci pol tekstowych ustawien scaffoldu
+			scaffold_from.maximum = scaffold.length_bp;
+			scaffold_from.value = start_view;
+			
+			scaffold_range.minimum = 100.0;
+			scaffold_range.maximum = scaffold.length_bp;
+			scaffold_range.value = range_value;
+			
+			scaffold_to.maximum = scaffold.length_bp;
+			scaffold_to.value = start_view + range_value;
+			
+			scaff_view.title = scaff_view.title.substr(0, 13) + " (ID = " + String(scaffold.scaff_id) + ")";
+			
+			var scaffold_canvas:ScaffoldCanvas = this.showScaffoldStructures(scaffold);
+			
+			// Rysujemy jasno-zolty prostokat jako oznaczenie rezultatu wyszukiwania (od start_bp do end_bp)
+			scaffold_canvas.drawBox(start_bp, 0, end_bp - start_bp, 50);
+		}
+		
+		private function showScaffoldStructures(scaffold:Object):ScaffoldCanvas
+		{
+			// Odrysowywujemy od nowa wszystko
+			if(scaffold_canvas)
+			{
+				scaffold_canvas.removeEventListener(ShiftEvent.TYPE, shiftCanvas);
+				scaff_view.removeEventListener(MouseEvent.MOUSE_DOWN, scaffold_canvas.shiftStart);
+				scaff_view.removeEventListener(MouseEvent.MOUSE_UP, scaffold_canvas.shiftStop);
+				
+				scaffold_canvas.removeEventListener(ZoomEvent.TYPE, zoomCanvas);
+				scaff_view.removeEventListener(MouseEvent.MOUSE_DOWN, scaffold_canvas.zoomStart);
+				scaff_view.removeEventListener(MouseEvent.MOUSE_UP, scaffold_canvas.zoomStop);
+				
+				scaff_view.removeChild(scaffold_canvas);
+			}
+			
+			// Utworzenie obiektu, na ktorym rysowane sa contigi i inne struktury
+			scaffold_canvas = new ScaffoldCanvas(scaff_view.width, scaff_view.height, scaffold_from.value, scaffold_to.value, scaffold);
+			
+			// Dodanie nasluchiwaczy
+			if(isMoveMode() == true)
+			{
+				scaffold_canvas.addEventListener(ShiftEvent.TYPE, shiftCanvas);
+				scaff_view.addEventListener(MouseEvent.MOUSE_DOWN, scaffold_canvas.shiftStart);
+				scaff_view.addEventListener(MouseEvent.MOUSE_UP, scaffold_canvas.shiftStop);
+			}
+			else
+			{
+				scaffold_canvas.addEventListener(ZoomEvent.TYPE, zoomCanvas);
+				scaff_view.addEventListener(MouseEvent.MOUSE_DOWN, scaffold_canvas.zoomStart);
+				scaff_view.addEventListener(MouseEvent.MOUSE_UP, scaffold_canvas.zoomStop);
+			}
+			
+			scaff_view.addEventListener(KeyboardEvent.KEY_UP, keyMove);
+			scaff_view.setFocus();
+			
+			scaff_view.addChild(scaffold_canvas);
+			
+			return scaffold_canvas;
+		}
+		
+		private function keyMove(event:KeyboardEvent):void 
+		{
+			if(event.keyCode == 37)	// lewo
+			{
+				shiftCanvas(new ShiftEvent(-(scaffold_range.value / 20)));
+			}
+			else if(event.keyCode == 39) // Prawo
+			{
+				shiftCanvas(new ShiftEvent(scaffold_range.value / 20));
+			}
+		}
+		
+		private function shiftCanvas(event:ShiftEvent):void
+		{
+			var shift:int = event.getShift();
+			trace("PRZESUWAM O " + shift);
+			// Wychodzimy w prawa strone za daleko
+			if(shift + scaffold_from.value > scaffold_to.maximum - scaffold_range.value)	
+			{
+				trace("\t\t!!! Chcemy przebic sie przez prawa sciane!");
+				scaffold_from.value = scaffold_to.maximum - scaffold_range.value;
+				scaffold_to.value = scaffold_to.maximum;
+			}
+			// Wychodzimy w lewa strone za bardzo
+			else if(shift + scaffold_from.value < scaffold_from.minimum)
+			{
+				trace("\t\t!!! Chcemy przebic sie przez lewa sciane!");
+				scaffold_from.value = scaffold_from.minimum;
+				scaffold_to.value = scaffold_from.value + scaffold_range.value;
+			}
+			// Jestesmy w granicach idealnie
+			else
+			{
+				trace("\t\t!!! Przesuwamy sie idealnie po srodku!");
+				scaffold_from.value = scaffold_from.value + shift;
+				scaffold_to.value = scaffold_from.value + scaffold_range.value;
+			}
+			scaffold_slider.setThumbValueAt(0, scaffold_from.value);
+			scaffold_slider.setThumbValueAt(1, scaffold_to.value);
+			
+			// Odswierzamy widok
+			onRefreshScaffold();
+		}
+		
+		private function zoomCanvas(event:ZoomEvent):void
+		{
+			var zoom_start:int = event.getStart();
+			var zoom_stop:int = event.getStop();
+			
+			if(zoom_stop <= zoom_start)		// W druga strone zoom zlapalismy
+			{
+				var tmp:int = zoom_start;
+				zoom_start = zoom_stop;
+				zoom_stop = tmp;
+			}
+			
+			if(Math.abs(zoom_start - zoom_stop) < 10)	// Szum
+				return;
+			
+			trace("\tZOOM!! Start: " + zoom_start + " . Stop: " + zoom_stop);
+			
+			scaffold_from.value = zoom_start;
+			scaffold_to.value = zoom_stop;
+			scaffold_range.value = zoom_stop - zoom_start;
+			
+			// Odswierzamy widok
+			onRefreshScaffold();
+		}
+		
+		private function slideRadioChanged(event:Event):void 
+		{
+			if(isMoveMode() == true)
+			{
+				// Usuniecie listenerow dla zooma
+				scaffold_canvas.removeEventListener(ZoomEvent.TYPE, zoomCanvas);
+				scaff_view.removeEventListener(MouseEvent.MOUSE_DOWN, scaffold_canvas.zoomStart);
+				scaff_view.removeEventListener(MouseEvent.MOUSE_UP, scaffold_canvas.zoomStop);
+				
+				// Dodanie listenerow dla przesuniecia
+				scaffold_canvas.addEventListener(ShiftEvent.TYPE, shiftCanvas);
+				scaff_view.addEventListener(MouseEvent.MOUSE_DOWN, scaffold_canvas.shiftStart);
+				scaff_view.addEventListener(MouseEvent.MOUSE_UP, scaffold_canvas.shiftStop);
+			}
+			else
+			{
+				// Usuniecie listenerow dla przesuniecia
+				scaffold_canvas.removeEventListener(ShiftEvent.TYPE, shiftCanvas);
+				scaff_view.removeEventListener(MouseEvent.MOUSE_DOWN, scaffold_canvas.shiftStart);
+				scaff_view.removeEventListener(MouseEvent.MOUSE_UP, scaffold_canvas.shiftStop);
+				
+				// Dodanie listenerow dla zooma
+				
+				scaffold_canvas.addEventListener(ZoomEvent.TYPE, zoomCanvas);
+				scaff_view.addEventListener(MouseEvent.MOUSE_DOWN, scaffold_canvas.zoomStart);
+				scaff_view.addEventListener(MouseEvent.MOUSE_UP, scaffold_canvas.zoomStop);
+			}
+		}
+		
+		public function isMoveMode():Boolean
+		{
+			return move_radio.selected;
+		}
+		
+		public function isZoomMode():Boolean
+		{
+			return zoom_radio.selected;
+		}
+
+
+	]]> </fx:Script>
+	
+	<fx:Style>       
+		.refreshStyle
+		{
+			color: #333399;
+			fontSize: 10;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	<fx:Declarations>
+		<s:RadioButtonGroup id="slide_radiogroup"/>
+	</fx:Declarations>
+	
+	<mx:VBox width="100%" height="100%">
+		<mx:ApplicationControlBar id="control_bar" width="100%">
+			<s:VGroup  width="100%">
+				<s:HGroup  width="100%">
+					<s:HGroup id="ass_buttons_group" width="100%">
+						<mx:Label text="Type: "/>
+					</s:HGroup>
+					<s:HGroup  width="100%">
+						<mx:Label text="View: "/>
+						<s:CheckBox id="scaffolds_checkbox" label="Show scaffolds" click="onRefresh();" color="blue"/>
+						<s:CheckBox id="contigs_checkbox" label="Show contigs" click="onRefresh();" color="blue"/>
+						<s:CheckBox id="markers_checkbox" label="Show markers" click="onRefresh();" color="blue"/>
+					</s:HGroup>
+				</s:HGroup>
+				
+				<!--<style:StatusBarPopup id="status">
+					
+				</style:StatusBarPopup>-->
+			</s:VGroup>
+		</mx:ApplicationControlBar>
+		
+		<mx:Panel id="chromosome_panel" x="0" y="100" width="100%" height="100%" color="#000066" useHandCursor="true">
+			<mx:VDividedBox width="100%" height="100%">
+				<mx:HDividedBox width="100%" height="40%">
+					<mx:Panel id="scaffolds_properties" title="Scaffolds view properties" minWidth="150" width="250" height="95%" color="#000066" useHandCursor="true">
+						<s:HGroup  width="100%" height="100%" paddingLeft="10" paddingTop="10" paddingBottom="10">
+							<mx:VSlider id="chromosome_slider" height="60%" allowThumbOverlap="false"
+										change="chromosomeSliderChange(event);" 
+										liveDragging="false" 
+										minimum="0.0"
+										snapInterval="0.10" 
+										thumbCount="2" 
+										tickInterval="10.0"
+										showDataTip ="false"/>
+							
+							<s:VGroup width="100%" height="100%" paddingLeft="10">								
+								<s:HGroup verticalAlign="top">
+									<mx:Label text="To: "/>
+									<mx:NumericStepper id="chromosome_to"
+													   minimum="0.00"
+													   stepSize="0.10" 
+													   change="updateChromosomeSliderStop();"/>
+								</s:HGroup>
+								
+								<s:HGroup verticalAlign="middle">
+									<mx:Label text="Range: "/>
+									<mx:NumericStepper id="chromosome_range"
+													   minimum="1.00"
+													   stepSize="0.10" 
+													   change="changeChromosomeRange();"/>
+								</s:HGroup>
+
+								<s:HGroup verticalAlign="bottom">
+									<mx:Label text="From: "/>
+									<mx:NumericStepper id="chromosome_from"
+													   minimum="0.00"
+													   stepSize="0.10" 
+													   change="updateChromosomeSliderStart();"/>
+								</s:HGroup>
+							</s:VGroup>
+						</s:HGroup>
+					</mx:Panel>
+					
+					<mx:Panel id="chromosome_view" title="Chromosome view" width="90%" height="95%" color="#006066" useHandCursor="true">
+					
+					</mx:Panel>
+				</mx:HDividedBox>
+				
+				<mx:HDividedBox width="100%" height="60%">
+					<mx:Panel id="scaff_properties" title="Scaffold view properties" minWidth="200" width="250" height="100%" color="#000066" useHandCursor="true">
+						<s:HGroup  width="100%" height="100%" paddingLeft="10" paddingTop="10" paddingBottom="10">
+							<mx:VSlider id="scaffold_slider" height="100%" allowThumbOverlap="false"
+										change="scaffoldSliderChange(event);" 
+										liveDragging="false" 
+										minimum="0" 
+										snapInterval="1.00" 
+										thumbCount="2" 
+										tickInterval="100.0"
+										showDataTip ="false"/>
+							
+							<s:VGroup width="181" height="199" paddingLeft="10">
+								<s:HGroup>
+									<mx:Label text="To: "/>
+									<mx:NumericStepper id="scaffold_to"
+													   minimum="0.00"
+													   stepSize="1.00" 
+													   change="updateScaffoldSliderStop();"/>
+								</s:HGroup>
+								
+								<s:HGroup>
+									<mx:Label text="Range: "/>
+									<mx:NumericStepper id="scaffold_range"
+													   minimum="100.00"
+													   stepSize="1.00" 
+													   change="changeScaffoldRange();"/>
+								</s:HGroup>
+								
+								<s:HGroup>
+									<mx:Label text="From: "/>
+									<mx:NumericStepper id="scaffold_from"
+													   minimum="0.00"
+													   stepSize="1.00" 
+													   change="updateScaffoldSliderStart();"/>
+								</s:HGroup>
+								<s:Spacer width="10" height="31"/>
+								<s:Label text="When sliding on scaffold:"/>
+								<s:RadioButton id="move_radio" label="Move"
+											   groupName="slide_radiogroup" selected="true" click="slideRadioChanged(event);"/>
+								<s:RadioButton id="zoom_radio" label="Zoom"
+											   groupName="slide_radiogroup" click="slideRadioChanged(event);"/>
+							</s:VGroup>
+						</s:HGroup>
+					</mx:Panel>
+					
+					<mx:Panel id="scaff_view" title="Scaffold view" width="100%" height="100%" color="#006066" useHandCursor="true">
+					
+					</mx:Panel>
+				</mx:HDividedBox>
+			</mx:VDividedBox>
+		</mx:Panel>
+	</mx:VBox>
+</s:TitleWindow>

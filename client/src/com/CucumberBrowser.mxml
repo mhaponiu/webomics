@@ -1,0 +1,481 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   x="0" y="0" width="100%" height="100%" close="onCloseEvent()" frameRate="25">
+	<fx:Script> <![CDATA[		
+		import com.dialog.AssembTypesManager;
+		import com.dialog.ImportData;
+		import com.dialog.ReadFile;
+		import com.dialog.Search;
+		import com.event.DeleteOrganismEvent;
+		import com.event.ImportEvent;
+		import com.event.OpenOrganismEvent;
+		import com.remote.RemoteControl;
+		
+		import flash.events.MouseEvent;
+		
+		import flashx.textLayout.formats.Float;
+		import flashx.textLayout.formats.TextAlign;
+		
+		import mx.collections.ArrayCollection;
+		import mx.containers.Canvas;
+		import mx.controls.Alert;
+		import mx.events.CloseEvent;
+		import mx.managers.CursorManager;
+		import mx.managers.PopUpManager;
+		import mx.rpc.events.FaultEvent;
+		import mx.utils.ArrayUtil;
+		import mx.utils.GraphicsUtil;
+		
+		import spark.components.Label;
+		
+		// ----------------------------------------------- ZMIENNE APLIKACJI -------------------------------------------
+		
+		/**
+		 *  
+		 */
+		private var connection:NetConnection;
+
+		/**
+		 *  
+		 */
+		private var colors_array:Array = new Array(0xFF00FF, 0xD22A2A, 0xB00A2A, 0xCCC63A, 0xEDABFF, 0xE6778A, 0xCA7A2A);
+		/**
+		 *  
+		 */
+		private var chromosomes_collection:ArrayCollection;
+		
+		/**
+		 * 
+		 */
+		private var organism_id:int = -1;
+		
+		// -------------------------------------------------- KONSTRUKTOR ----------------------------------------------
+		
+		/**
+		 * Konstruktor
+		*/
+		public function build(width:Number, height:Number):void
+		{
+			connection = new NetConnection();
+			connection.connect(RemoteControl.GATEWAY);
+			CursorManager.setBusyCursor();
+			
+			// Wlasciwosci okna
+			this.x = 0;
+			this.y = 0;
+			this.title = "Genome Browser";
+			this.width = width;
+			this.height = height;
+		}
+		
+		/**
+		 * 
+		 */
+		public function init(organism_id:int):void
+		{
+			this.organism_id = organism_id;
+			// Pobranie informacji o wszystkich chromosomach
+			connection.call("chromosome.getAll", new Responder(drawChromosomes, onFault), organism_id);
+		}
+		
+		// --------------------------------------------------- RESPONDERY ----------------------------------------------
+		
+		/**
+		 * Funkcja rysujaca obiekty chromosomow
+		 * @param data: Informacje o chromosomach
+		 */
+		private function drawChromosomes(data:Object):void
+		{
+			if(data == null)
+			{
+				Alert.show("There is no data to display! Import data first.");
+				CursorManager.removeBusyCursor();
+				return;
+			}
+			
+			chromosomes_collection = new ArrayCollection(ArrayUtil.toArray(data));
+			if(chromosomes_collection.length > 0)
+			{
+				trace("Szerokosc panelu chromosomow: " + chromosomes_panel.width);
+				var column_width:Number = chromosomes_panel.width / chromosomes_collection.length - 10;
+				var position_x:Number = (column_width - 100) / 2;
+				
+				for(var i:uint; i < chromosomes_collection.length; i++)
+				{
+					var id:uint = chromosomes_collection[i]['id'];
+					var chr_length:Number = chromosomes_collection[i]['length'];
+					
+					// Nazwa chromosomu
+					var name_label:Label = new Label();
+					name_label.id = "label_" + String(i);
+					name_label.setStyle("textAlign", TextAlign.CENTER);
+					name_label.styleName = "labelStyle";
+					name_label.text = chromosomes_collection[i]['name'];
+					name_label.width = column_width;
+					name_label.addEventListener(MouseEvent.CLICK, showChromosome);
+					name_label.useHandCursor = true;
+					names_group.addElement(name_label);
+					
+					// Wizualizacja
+					var chromosome_figure:Canvas = new Canvas();
+					chromosome_figure.id = "figure_" + String(i);
+					chromosome_figure.setStyle("textAlign", TextAlign.CENTER);
+					chromosome_figure.width = column_width;
+					chromosome_figure.addEventListener(MouseEvent.CLICK, showChromosome);
+					chromosome_figure.useHandCursor = true;
+					chromosome_figure.buttonMode = true;
+					chromosome_figure.mouseChildren = false;
+					chromosome_figure.toolTip = chromosomes_collection[i]['name'] + " (ID=" + String(id) + ")";
+					chromosomes_group.addElement(chromosome_figure);
+	
+					// Proporcja slupkow chromosomow
+					var figure_height:Number = chr_length * 4;
+					if(figure_height == 0)
+						figure_height = 1.0;
+	
+					chromosome_figure.graphics.beginFill(colors_array[i]/*0xCCD120*/);
+					chromosome_figure.graphics.drawRoundRect(position_x, 500, 100, 0-figure_height, figure_height, figure_height)
+					
+					position_x = position_x + column_width + 5;
+				}
+				
+				// Narysowanie niezdefiniowanych elementow - scaffoldow
+				undefined_scaff_box.graphics.clear();
+				undefined_scaff_box.addEventListener(MouseEvent.CLICK, showUndefinedScaffolds);
+				undefined_scaff_box.useHandCursor = true;
+				undefined_scaff_box.buttonMode = true;
+				undefined_scaff_box.mouseChildren = false;
+				undefined_scaff_box.graphics.beginFill(0xCCC63A);
+				GraphicsUtil.drawRoundRectComplex(undefined_scaff_box.graphics, 
+					0,
+					0,
+					undefined_scaff_box.width,
+					undefined_scaff_box.width,
+					20,
+					20,
+					20,
+					20);
+				undefined_scaff_label.styleName = "labelStyle";
+				
+				// Narysowanie niezdefiniowanych elementow - contigów
+				undefined_cont_box.graphics.clear();
+				undefined_cont_box.addEventListener(MouseEvent.CLICK, showUndefinedContigs);
+				undefined_cont_box.useHandCursor = true;
+				undefined_cont_box.buttonMode = true;
+				undefined_cont_box.mouseChildren = false;
+				undefined_cont_box.graphics.beginFill(0xD22A2A);
+				GraphicsUtil.drawRoundRectComplex(undefined_cont_box.graphics, 
+					0,
+					0,
+					undefined_cont_box.width,
+					undefined_cont_box.width,
+					20,
+					20,
+					20,
+					20);
+				undefined_cont_label.styleName = "labelStyle";
+			}
+			CursorManager.removeBusyCursor();
+		}
+		
+		/**
+		 * Reakcja na bledne dzialanie komunikacji z serwerem aplikacji 
+		 */
+		private function onFault(event:FaultEvent):void
+		{
+			Alert.show(String(event.fault));
+		}
+		
+		// ---------------------------------------------------- LISTENERY ----------------------------------------------
+		
+		/**
+		 * Nasluchiwacz myszy w przypadku klikniecia na chromosom
+		 * @param event: Zdarzenie, ktore wykonano
+		 */
+		private function showChromosome(event:MouseEvent):void
+		{
+			var label:String = String(event.currentTarget.id);
+			var num:uint = uint(label.split('_')[1]);
+			var chromosome_obj:Object = chromosomes_collection[num];
+			
+			var chromosome_dialog:ChromosomeView = new ChromosomeView();
+			PopUpManager.addPopUp(chromosome_dialog, this, true);
+			PopUpManager.centerPopUp(chromosome_dialog);
+			chromosome_dialog.init("Chromosome " + String(num + 1), this.width, this.height, chromosome_obj, this.organism_id);
+		}
+		
+		/**
+		 * Nasluchiwacz myszy w przypadku klikniecia na element niezdefiniowanych scaffoldow
+		 * @param event: Zdarzenie, ktore wykonano
+		 */
+		private function showUndefinedScaffolds(event:MouseEvent):void
+		{
+			var undefined_scaffolds_dialog:UndefinedScaffoldsView = new UndefinedScaffoldsView();
+			PopUpManager.addPopUp(undefined_scaffolds_dialog, this, true);
+			PopUpManager.centerPopUp(undefined_scaffolds_dialog);
+			undefined_scaffolds_dialog.init(this.width, this.height);
+		}
+		
+		/**
+		 * Nasluchiwacz myszy w przypadku klikniecia na element niezdefiniowanych contigow
+		 * @param event: Zdarzenie, ktore wykonano
+		 */
+		private function showUndefinedContigs(event:MouseEvent):void
+		{
+			
+		}
+		
+		/**
+		 * 
+		*/
+		protected function searchButtonClicked(event:MouseEvent):void
+		{
+			var search_dialog:Search = new Search();
+			PopUpManager.addPopUp(search_dialog, this, false);
+			PopUpManager.centerPopUp(search_dialog);
+			search_dialog.init();
+		}
+		
+		/**
+		 * 
+		 */
+		protected function assembTypesButtonClicked(event:MouseEvent):void
+		{
+			var assemb_types_dialog:AssembTypesManager = new AssembTypesManager();
+			PopUpManager.addPopUp(assemb_types_dialog, this, false);
+			PopUpManager.centerPopUp(assemb_types_dialog);
+			assemb_types_dialog.init(this.organism_id);
+		}
+		
+		/**
+		 * 
+		 */
+		protected function importDataButtonClicked(event:MouseEvent):void
+		{
+			var import_data_dialog:ImportData = new ImportData();
+			PopUpManager.addPopUp(import_data_dialog, this, false);
+			PopUpManager.centerPopUp(import_data_dialog);
+			import_data_dialog.init(organism_id);
+			import_data_dialog.addEventListener(ImportEvent.TYPE, onImportData);
+		}
+		
+		private function onImportData(event:ImportEvent):void
+		{
+			// Odswiezenie widoku - powolanie nowego okna i zamkniecie aktualnego
+			dispatchEvent(new OpenOrganismEvent("org_" + String(this.organism_id)));
+			PopUpManager.removePopUp(this);
+		}
+		
+		/**
+		 * 
+		 */
+		protected function deleteButtonClicked(event:MouseEvent):void
+		{
+			Alert.show("Are you sure you want to delete this organism?", "Confirm delete organism", Alert.YES | Alert.NO, this, deleteContigHandler, null, Alert.NO);	
+		}
+		
+		private function deleteContigHandler(event:CloseEvent):void
+		{
+			if(event.detail == Alert.YES)
+			{
+				CursorManager.setBusyCursor();
+				connection.call("organism.delete", new Responder(onDeleteOrganism, onFaultDeleteOrganism), this.organism_id);
+				
+				PopUpManager.removePopUp(this);
+			}
+		}
+		
+		/**
+		 * 
+		 */
+		private function onDeleteOrganism(contig:Object):void
+		{
+			CursorManager.removeBusyCursor();
+			Alert.show("Organism deleted successfully!", "Success");
+			
+			dispatchEvent(new DeleteOrganismEvent(this.organism_id));
+		}
+		
+		/**
+		 * 
+		 */
+		private function onFaultDeleteOrganism(obj:Object):void
+		{
+			CursorManager.removeBusyCursor();
+			Alert.show("Blad w dzialaniu aplikacji w oknie CucumberBrowser podczas usuwania obiektu organizmu!");
+			trace("Blad: " + obj);
+		}
+		
+		protected function testButtonClicked(event:MouseEvent):void
+		{
+			var read_file:ReadFile = new ReadFile();
+			PopUpManager.addPopUp(read_file, this, false);
+			PopUpManager.centerPopUp(read_file);
+		}
+		
+		private function onGetContigs(data:Object):void
+		{
+			trace("\n\t\tDostalem contigi:" + String(data));
+			var contigs:Array = ArrayUtil.toArray(data);
+			//Alert.show(String(event.fault));
+		}
+		
+		private function onFaultGetContigs(event:FaultEvent):void
+		{
+			Alert.show(String(event.fault));
+		}
+		
+		
+		
+		protected function testOneButtonClicked(event:MouseEvent):void
+		{
+			// Pobranie contiga
+			connection.call("contig.get", new Responder(onGetOneContigs, onFaultGetOneContigs), 192492);
+		}
+		
+		private function onGetOneContigs(data:Object):void
+		{
+			trace("\n\t\tDostalem contiga:" + String(data.id));
+			 var id:int = data.id;
+			 var scaff_id:String = data.scaff_id;
+			
+			 var order:int = data.order;
+			
+			 var start:int = data.start;
+			 var end:int = data.end;
+			
+			 var sequence:String = data.sequence;
+			
+			 var length_bp:Float = data.float;
+			//Alert.show(String(event.fault));
+		}
+		
+		private function onFaultGetOneContigs(event:FaultEvent):void
+		{
+			Alert.show(String(event.fault));
+		}
+		
+		
+		protected function testOneScaffButtonClicked(event:MouseEvent):void
+		{
+			// Pobranie contiga
+			connection.call("scaffold.getScaffold", new Responder(onGetOneScaff, onFaultGetOneScaff), "360360");
+		}
+		
+		private function onGetOneScaff(data:Object):void
+		{
+			trace("\n\t\tDostalem scaff:" + String(data.id));
+			//Alert.show(String(event.fault));
+		}
+		
+		private function onFaultGetOneScaff(event:FaultEvent):void
+		{
+			Alert.show(String(event.fault));
+		}
+		
+		/**
+		 * 
+		 */
+		private function onCloseEvent():void
+		{
+			PopUpManager.removePopUp(this);
+		}
+		
+	]]> </fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 14;
+			fontWeight: bold;
+		}
+		.arachneStyle
+		{
+			color: #CCD120;
+			fontSize: 12;
+			fontWeight: bold;
+		}
+		.celeraStyle
+		{
+			color: #41A317;
+			fontSize: 12;
+			fontWeight: bold;
+		}
+		global
+		{
+		}
+	</fx:Style>
+	
+	<mx:VBox width="100%"
+			 height="100%">
+		<mx:ApplicationControlBar width="100%">
+			<mx:HBox width="100%"
+					 height="100%">
+				<mx:Button id="search_button"
+						   label="Search"
+						   icon="@Embed(source='img/search16.png')"
+						   click="searchButtonClicked(event)"/>
+				
+				<mx:Button id="assemb_types_button"
+						   label="Assembling types options"
+						   icon="@Embed(source='img/assemb16.png')"
+						   click="assembTypesButtonClicked(event)"/>
+				
+				<mx:Button id="import_data_button"
+						   label="Import data"
+						   icon="@Embed(source='img/import16.png')"
+						   click="importDataButtonClicked(event)"/>
+				
+				<mx:Button id="delete_button"
+						   label="Delete organism"
+						   icon="@Embed(source='img/delete16.png')"
+						   click="deleteButtonClicked(event)"/>
+				
+				<mx:Button id="test_button"
+						   label="Test"
+						   click="testButtonClicked(event)"
+						   visible="false"/>
+				
+				<mx:Button id="test_button_one"
+						   label="Test one"
+						   click="testOneButtonClicked(event)"
+						   visible="false"/>
+				
+				<mx:Button id="test_button_one_scaff"
+						   label="Test one SCAFF"
+						   click="testOneScaffButtonClicked(event)"
+						   visible="false"/>
+				
+			</mx:HBox>
+		</mx:ApplicationControlBar>
+		
+		<s:HGroup  width="100%" height="100%" >
+			<s:Panel id="chromosomes_panel" width="80%" height="100%" title="Chromosomes">
+				<s:layout>
+					<s:VerticalLayout gap="0" horizontalAlign="center"/>
+				</s:layout>
+				<s:HGroup paddingTop="20">
+					<s:VGroup id="defined" width="100%" height="100%">
+						<s:HGroup id="names_group" width="100%" height="10%">
+						</s:HGroup>
+						<s:HGroup id="chromosomes_group" width="100%" height="80%">
+						</s:HGroup>
+					</s:VGroup>
+				</s:HGroup>
+			</s:Panel>
+		
+			<s:Panel id="undefined_panel" width="20%" height="100%" title="Undefined elements">
+				<s:VGroup id="undefined" width="100%" height="100%" paddingTop="20" horizontalAlign="center">
+					<s:Label id="undefined_scaff_label" text="Undefined scaffolds"/>
+					<mx:Box id="undefined_scaff_box" width="40%" height="40%" />
+					
+					<s:Label id="undefined_cont_label" text="Undefined contigs"/>
+					<mx:Box id="undefined_cont_box" width="40%" height="40%" />
+				</s:VGroup>
+			</s:Panel>
+		</s:HGroup>
+	</mx:VBox>
+</s:TitleWindow>

@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx" width="100%" height="100%"
+			   creationComplete="init()">
+	<fx:Script> <![CDATA[	
+		import com.dialog.AddNewOrganism;
+		import com.event.DeleteOrganismEvent;
+		import com.event.NewOrganismEvent;
+		import com.event.OpenOrganismEvent;
+		import com.remote.RemoteControl;
+		
+		import flash.utils.setTimeout;
+		
+		import mx.collections.ArrayCollection;
+		import mx.controls.Alert;
+		import mx.controls.Button;
+		import mx.managers.CursorManager;
+		import mx.managers.PopUpManager;
+		import mx.rpc.events.FaultEvent;
+		import mx.utils.ArrayUtil;
+		
+		/**
+		 *  
+		 */
+		private var connection:NetConnection;
+		
+		private var organismsCollection:ArrayCollection;
+		
+		/**
+		 * Konstruktor
+		 */
+		private function init():void
+		{
+			connection = new NetConnection();
+			connection.connect(RemoteControl.GATEWAY);
+			CursorManager.setBusyCursor();
+
+			// Poinformowanie serwera o uruchomieniu aplikacji klienta
+			connection.call("main.start", new Responder(onStart, onFault));
+		}
+		
+		private function onStart(data:Object):void
+		{
+			connection.call("organism.getOrganisms", new Responder(onGetAllOrganisms, onGetOrganismFault));
+		}
+		
+		private function onGetAllOrganisms(data:Object):void
+		{
+			this.organismsCollection = new ArrayCollection(ArrayUtil.toArray(data));
+			
+			for each (var org in this.organismsCollection)
+			{
+				var index_in_org_group : int = addOrganismButton(org['name'], org['id']);
+				org['index'] = index_in_org_group;
+			}
+			
+			CursorManager.removeBusyCursor();
+		}
+		
+		private function addOrganismButton(org_name : String, org_id : String):int
+		{
+			var org_button : Button = new Button();
+			org_button.label = org_name;
+			org_button.id = "organism_" + org_id;
+			org_button.addEventListener(MouseEvent.CLICK, organismClicked);
+			org_button.width = 300;
+			org_button.height = 100;
+			org_button.setStyle("fontSize", 32);
+			
+			organisms_group.addElement(org_button);
+			
+			return organisms_group.getElementIndex(org_button);
+		}
+		
+		/**
+		 * Reakcja na bledne dzialanie komunikacji z serwerem aplikacji 
+		 */
+		private function onFault(event:FaultEvent):void
+		{
+			Alert.show(String(event.fault));
+			CursorManager.removeBusyCursor();
+		}
+		
+		/**
+		 * Reakcja na bledne dzialanie komunikacji z serwerem aplikacji 
+		 */
+		private function onGetOrganismFault(event:FaultEvent):void
+		{
+			trace("Blad podczas dzialania aplikacji podczas pobierania organizmow.");
+			Alert.show(String(event.fault));
+			CursorManager.removeBusyCursor();
+		}
+		
+		/**
+		 * 
+		 */
+		protected function organismClicked(event:MouseEvent):void
+		{
+			openOrganismWindow(event.currentTarget.id);
+		}
+		
+		protected function openOrganismWindow(targetID:String):void
+		{
+			var cucumber_browser:CucumberBrowser = new CucumberBrowser();
+			PopUpManager.addPopUp(cucumber_browser, this, true);
+			PopUpManager.centerPopUp(cucumber_browser);
+			cucumber_browser.build(this.width, this.height);
+			cucumber_browser.addEventListener(DeleteOrganismEvent.TYPE, onDeleteOrganism);
+			cucumber_browser.addEventListener(OpenOrganismEvent.TYPE, onOpenOrganism);
+			
+			var button_id : String = String(targetID);
+			var button_id_array : Array = button_id.split("_");
+			
+			setTimeout(cucumber_browser.init, 1000, button_id_array[1]);
+		}
+		
+		protected function onOpenOrganism(event:OpenOrganismEvent):void
+		{
+			openOrganismWindow(event.getID());
+		}
+		
+		/**
+		 * 
+		 */
+		protected function onDeleteOrganism(event:DeleteOrganismEvent):void
+		{
+			var found : Boolean = false;
+			trace("Usuwamy: " + String(event.getID()));
+			for each (var org in this.organismsCollection)
+			{
+				trace("Analizuje: " + String(int(org['id'])));
+				if(int(org['id']) == event.getID())
+				{
+					organisms_group.removeElementAt(int(org['index']));
+					found = true;
+				}
+			}
+			
+			if(found == false)
+			{
+				Alert.show("Error while refreshing!");
+			}
+		}
+		
+		/**
+		 * 
+		 */
+		protected function addOrganismButtonClicked(event:MouseEvent):void
+		{
+			var new_organism_dialog:AddNewOrganism = new AddNewOrganism();
+			PopUpManager.addPopUp(new_organism_dialog, this, false);
+			PopUpManager.centerPopUp(new_organism_dialog);
+			new_organism_dialog.init();
+			new_organism_dialog.addEventListener(NewOrganismEvent.TYPE, onAddNewOrganism);
+		}
+		
+		private function onAddNewOrganism(event:NewOrganismEvent):void
+		{
+			var organism_object : Object = new Object();
+			organism_object['id'] = event.getID();
+			organism_object['name'] = event.getName();
+			organism_object['description'] = event.getDescription();
+			var index_in_org_group : int = addOrganismButton(event.getName(), String(event.getID()));
+			organism_object['index'] = index_in_org_group;
+			this.organismsCollection.addItem(organism_object);
+		}
+	]]> </fx:Script>
+	
+	<mx:VBox width="100%"
+			 height="100%">
+		<mx:ApplicationControlBar width="100%">
+			<mx:HBox width="100%"
+					 height="100%">
+				<mx:Button id="add_organism_button"
+						   label="Add organism"
+						   icon="@Embed(source='img/add16.png')"
+						   click="addOrganismButtonClicked(event)"/>
+				
+			</mx:HBox>
+		</mx:ApplicationControlBar>
+		<s:TileGroup id="organisms_group" width="100%" height="100%" horizontalGap="1" verticalGap="1">
+			<!-- <mx:Button id="organism_1" width="300" height="200" click="organismClicked(event)" label="Cucumber"
+					   icon="@Embed('img/cucumber.jpg')"/> -->
+		</s:TileGroup>
+		
+		</mx:VBox>
+</s:Application>

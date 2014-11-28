@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TitleWindow xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:net="flash.net.*"
+			   width="800" height="400" close="onCloseEvent();" title="Scaffold details">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.config.Config;
+			import com.remote.RemoteControl;
+			import com.dialog.ContigsOnScaffold;
+			import com.dialog.MarkersOnScaffold;
+			
+			import mx.controls.Alert;
+			import mx.events.CloseEvent;
+			import mx.managers.CursorManager;
+			import mx.managers.PopUpManager;
+			
+			/**
+			 * 
+			 */
+			private var connection:NetConnection;
+			
+			/**
+			 * 
+			 */
+			private var scaffold_obj:Object;
+			
+			public function init(scaffold:Object):void 
+			{
+				CursorManager.setBusyCursor();
+				this.scaffold_obj = scaffold;
+				this.title = this.title + " (ID = " + String(scaffold.scaff_id) + ")"
+				
+				id_label.text = String(scaffold.scaff_id);
+				chromosome_label.text = "Chromosome " + String(scaffold.chromosome_id);
+				position_cm_label.text = String(scaffold.start);
+				end_cm_label.text = String(scaffold.end);
+				if(String(scaffold.sequence).length < 60000)
+					sequence_text_area.text = String(scaffold.sequence);
+				else
+					sequence_text_area.text = "Sequence of scaffold is too long! Click below and download it on your computer.";
+				
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+				connection.call("chromosome.getAssembName", new Responder(onGetAssembName, onFaultGetAssembName), int(scaffold.assemb_type));
+
+				length_bp.text = String(scaffold.length_bp);
+				order.text = String(scaffold.order);
+				CursorManager.removeBusyCursor();
+			}
+			
+			public function initByID(scaff_id:String):void
+			{
+				CursorManager.setBusyCursor();
+				// Nawiazanie polaczenia z serwerem aplikacji
+				connection = new NetConnection();
+				connection.connect(RemoteControl.GATEWAY);
+				
+				connection.call("scaffold.getScaffold", new Responder(onGetScaffold, onFaultGetScaffold), String(scaff_id));
+			}
+			
+			/**
+			 * 
+			 */
+			private function onGetAssembName(assemb_name:Object):void
+			{
+				assembling_label.text = String(assemb_name);
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultGetAssembName(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie ScaffoldInformations podczas pobierania nazwy typu asemblacji!");
+				trace("Blad: " + obj);
+			}
+			
+			/**
+			 * 
+			 */
+			private function onGetScaffold(scaffold:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				
+				this.init(scaffold);
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultGetScaffold(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie ScaffoldInformations podczas pobierania obiektu scaffoldu!");
+				trace("Blad: " + obj);
+			}
+			
+			private function onContigsEvent():void
+			{
+				var contigs_dialog:ContigsOnScaffold = new ContigsOnScaffold();
+				PopUpManager.addPopUp(contigs_dialog, this, false);
+				PopUpManager.centerPopUp(contigs_dialog);
+				contigs_dialog.init(this.scaffold_obj.scaff_id);		
+			}
+			
+			private function onMarkersEvent():void
+			{
+				var markers_dialog:MarkersOnScaffold = new MarkersOnScaffold();
+				PopUpManager.addPopUp(markers_dialog, this, false);
+				PopUpManager.centerPopUp(markers_dialog);
+				markers_dialog.init(this.scaffold_obj.scaff_id);		
+			}
+			
+			private function onDeleteButtonClicked():void
+			{
+				Alert.show("Are you sure you want to delete this scaffold with all associated contigs?", "Confirm delete scaffold with contigs", Alert.YES | Alert.NO, this, deleteScaffoldHandler, null, Alert.NO);
+			}
+			
+			private function deleteScaffoldHandler(event:CloseEvent):void
+			{
+				if(event.detail == Alert.YES)
+				{
+					CursorManager.setBusyCursor();
+					connection.call("scaffold.delete", new Responder(onDeleteScaffold, onFaultDeleteScaffold), this.scaffold_obj.scaff_id, true);
+					
+					PopUpManager.removePopUp(this);
+				}
+			}
+			
+			/**
+			 * 
+			 */
+			private function onDeleteScaffold(contig:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Scaffold deleted successfully! Reopen chromosome window to refresh content.", "Success");
+				//TODO: Przeslanie do widoku informacji o usunieciu scaffoldu - do chromosomeCanvas itd zeby wyrzucil scaffold
+			}
+			
+			/**
+			 * 
+			 */
+			private function onFaultDeleteScaffold(obj:Object):void
+			{
+				CursorManager.removeBusyCursor();
+				Alert.show("Blad w dzialaniu aplikacji w oknie ScaffoldInformations podczas usuwania obiektu scaffoldu!");
+				trace("Blad: " + obj);
+			}
+			
+			private function onCloseEvent():void
+			{
+				PopUpManager.removePopUp(this);
+			}
+			
+			private function onDownloadEvent():void
+			{
+				fileReference.save(String(this.scaffold_obj.sequence), "scaffold" + this.scaffold_obj.scaff_id + ".txt");
+			}
+		]]>
+	</fx:Script>
+	
+	<fx:Style>       
+		.labelStyle
+		{
+			color: #333399;
+			fontSize: 16;
+			fontWeight: bold;
+		}
+	</fx:Style>
+	
+	<fx:Declarations>
+		<net:FileReference id="fileReference" />
+		<mx:WipeLeft id = 'wipe_left' />
+	</fx:Declarations>
+	
+	<s:layout>
+		<s:VerticalLayout paddingTop="5" paddingBottom="5" paddingLeft="5" paddingRight="5"/>
+	</s:layout>
+	
+	<mx:VBox label = 'Scaffolds informations' width="100%" height="100%">
+		<mx:HDividedBox width="100%" height="100%">
+			<mx:Form borderStyle="solid" width="100%" height="100%">
+				<mx:FormItem label="ID" labelStyleName="labelStyle">
+					<mx:TextInput id="id_label" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Chromosome" labelStyleName="labelStyle">
+					<mx:TextInput id="chromosome_label" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Position start (cM)" labelStyleName="labelStyle">
+					<mx:TextInput id="position_cm_label" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Position end (cM)" labelStyleName="labelStyle">
+					<mx:TextInput id="end_cm_label" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Assembling" labelStyleName="labelStyle">
+					<mx:TextInput id="assembling_label" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Length (bp)" labelStyleName="labelStyle">
+					<mx:TextInput id="length_bp" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem label="Order" labelStyleName="labelStyle">
+					<mx:TextInput id="order" editable="false"/>
+				</mx:FormItem>
+				<mx:FormItem>
+					<mx:Button id="contigs_button" 
+							   label="List of contigs" 
+							   width="{id_label.width}"
+							   click="onContigsEvent();"/>
+				</mx:FormItem>
+				<mx:FormItem>
+					<mx:Button id="markers_button" 
+							   label="List of markers" 
+							   width="{id_label.width}"
+							   click="onMarkersEvent();"/>
+				</mx:FormItem>
+				<mx:FormItem>
+					<mx:Button id="delete_button" 
+							   label="Delete scaffold" 
+							   width="{id_label.width}"
+							   click="onDeleteButtonClicked();"/>
+				</mx:FormItem>
+				<mx:FormItem>
+					<mx:Button id="close_button" 
+							   label="Close" 
+							   width="{id_label.width}"
+							   click="onCloseEvent();"/>
+				</mx:FormItem>
+			</mx:Form>
+			
+			<s:VGroup width="100%" height="100%">
+				<mx:TextArea id="sequence_text_area" width="100%" height="100%" editable="false">
+				</mx:TextArea>
+		
+				<mx:Button id="download_button" 
+							   label="Download" 
+							   width="{id_label.width}"
+							   click="onDownloadEvent();" enabled="true"/>
+			</s:VGroup>
+		</mx:HDividedBox>
+	</mx:VBox>
+</s:TitleWindow>

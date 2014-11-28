@@ -1,0 +1,66 @@
+import os, sys, platform, glob
+import SCons.Builder
+from xmlConfigsGenerate import XmlConfigs
+
+# IMPORTY
+Import('env')
+Import('FLEX_PATH_LINUX')
+Import('FLEX_PATH_WINDOWS')
+
+Import('FLEX_CONFIG_LINUX')
+Import('FLEX_CONFIG_WINDOWS')
+
+Import('PROJECT_PATH_LINUX')
+Import('PROJECT_PATH_WINDOWS')
+
+e = env.Clone()
+
+if(platform.system() == "Linux"):
+   os.putenv('LD_LIBRARY_PATH', os.getcwd() )
+   os.putenv('PYTHONPATH', os.getcwd() )
+   FLEX_PATH = FLEX_PATH_LINUX
+   FLEX_CONFIG = FLEX_CONFIG_LINUX
+   PROJECT_PATH = PROJECT_PATH_LINUX
+   xml_configs = XmlConfigs(XmlConfigs.LINUX_, FLEX_PATH, PROJECT_PATH)
+   xml_configs.generate(FLEX_CONFIG_LINUX)
+elif(platform.system() == "Windows"):
+   os.putenv('PYTHONPATH', os.getcwd() )
+   os.putenv('PATH', os.getcwd() + ';' + os.getenv('PATH'))
+   FLEX_PATH = FLEX_PATH_WINDOWS
+   FLEX_CONFIG = FLEX_CONFIG_WINDOWS
+   PROJECT_PATH = PROJECT_PATH_WINDOWS
+   xml_configs = XmlConfigs(XmlConfigs.WINDOWS_, FLEX_PATH, PROJECT_PATH)
+   xml_configs.generate(FLEX_CONFIG_WINDOWS)
+else:
+   print platform.system() + " not supported"
+
+#mxmlBuilder = SCons.Builder.Builder( action = 'mxmlc $SOURCE -output $TARGET -debug=false --show-actionscript-warnings=true -static-link-runtime-shared-libraries=true --strict=true' )
+mxmlBuilder = SCons.Builder.Builder( action = FLEX_PATH + '/bin/mxmlc -load-config+=client/' + FLEX_CONFIG + ' $SOURCE -output $TARGET' )
+
+e.Append( ENV = {'PATH' : os.environ['PATH']} )
+e.Append( BUILDERS={'BuildMXML' : mxmlBuilder} )
+
+build_dir = 'build/'
+
+e.Install(build_dir, 'deploy/WebOmicsViewer.html')
+e.Install(build_dir, 'deploy/swfobject.js')
+swfs = glob.glob("deploy/*.swf")
+swzs = glob.glob("deploy/*.swz")
+for swf in swfs:
+    e.Install(build_dir, swf)
+for swz in swzs:
+    e.Install(build_dir, swz)
+
+client_program = e.BuildMXML( target = build_dir + 'WebOmicsViewer.swf', source = 'src/com/WebOmicsViewer.mxml' )
+print "Client program:", client_program
+e.Depends( client_program,
+             Glob('src/com/*.mxml')
+           + Glob('src/com/dialog/*.mxml')
+           + Glob('src/com/config/*.as')
+           + Glob('src/com/event/*.as')
+           + Glob('src/com/style/*.as')
+           + Glob('src/com/view/*.as')
+           + Glob('src/com/vos/*.as')
+           + Glob('src/com/object/*.as')
+           + Glob('src/com/remote/*.as')
+          )
